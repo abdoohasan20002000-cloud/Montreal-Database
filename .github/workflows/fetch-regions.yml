@@ -1,0 +1,34 @@
+# Downloads the borough and linked-city boundaries from Montréal open data and commits them to data/.
+# Runs when the fetch script changes, or by hand from the Actions tab ("Run workflow").
+name: Fetch region boundaries
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - scripts/fetch_regions.py
+      - .github/workflows/fetch-regions.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "shapely>=2.0" "pyproj>=3.6"
+      - run: python scripts/fetch_regions.py
+      - name: Commit the boundaries if they changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/regions.geojson data/island_outline.geojson data/regions_report.txt
+          if git diff --cached --quiet; then echo "No change"; else
+            git commit -m "Update region boundaries from Montréal open data"
+            git push
+          fi
