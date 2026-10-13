@@ -1,19 +1,30 @@
 [theme]
-base = "light"
-primaryColor = "#0e7c86"
-backgroundColor = "#f6f5f1"
-secondaryBackgroundColor = "#ffffff"
-textColor = "#1c2430"
-font = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+base = "dark"
+primaryColor = "#22d3ee"
+backgroundColor = "#0a1520"
+secondaryBackgroundColor = "#112130"
+textColor = "#e6edf3"
+linkColor = "#67e8f9"
+borderColor = "#1c3a4d"
+dataframeBorderColor = "#1c3a4d"
+dataframeHeaderBackgroundColor = "#0f1f2d"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
 headingFont = "Space Grotesk:https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap"
-codeFont = "IBM Plex Mono:https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
-baseRadius = "0.6rem"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"
+baseRadius = "0.75rem"
+buttonRadius = "0.75rem"
+showSidebarBorder = true
+# Validated for the dark surface (dataviz validator): blue, orange, aqua, yellow, magenta, green, violet, red.
+chartCategoricalColors = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
+# One-hue blue ramp, dark (low) to light (high) for the dark surface.
+chartSequentialColors = ["#104281", "#184f95", "#1c5cab", "#256abf", "#2a78d6", "#3987e5", "#5598e7", "#6da7ec", "#9ec5f4", "#cde2fb"]
 
 [theme.sidebar]
-backgroundColor = "#14202b"
-textColor = "#e8ecef"
-primaryColor = "#4fc3c9"
-secondaryBackgroundColor = "#1d2c39"
+backgroundColor = "#0d1a26"
+secondaryBackgroundColor = "#112130"
+textColor = "#dbe5ee"
+primaryColor = "#22d3ee"
+borderColor = "#1c3a4d"
 
 [client]
 toolbarMode = "minimal"
@@ -21,3 +32,4 @@ showErrorDetails = true
 
 [server]
 maxUploadSize = 200
+enableStaticServing = true

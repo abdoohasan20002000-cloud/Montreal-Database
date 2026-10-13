@@ -26,12 +26,12 @@ how = st.radio("Place it by", ["Clicking or drawing on the map", "Typing coordin
 footprint = None  # shapely geometry, MTM 8
 
 if how == "Clicking or drawing on the map":
-    m = folium.Map(location=[45.55, -73.70], zoom_start=11, tiles=None)
-    folium.TileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", name="Light",
-                     attr="© OpenStreetMap contributors © CARTO").add_to(m)
+    m = ui.base_map((45.55, -73.70), 11, layers=("Dark", "Light", "Satellite"))
     Draw(export=False, draw_options={"polyline": True, "circlemarker": False, "circle": False}).add_to(m)
     if state.get("up_geom"):
-        folium.GeoJson(state["up_geom"]).add_to(m)
+        folium.GeoJson(state["up_geom"], style_function=lambda f: {"color": ui.ACCENT, "fillColor": ui.ACCENT,
+                                                                   "fillOpacity": 0.1}).add_to(m)
+    folium.LayerControl(collapsed=True, position="topright").add_to(m)
     out = st_folium(m, height=420, use_container_width=True, returned_objects=["last_active_drawing", "last_clicked"])
     if out and out.get("last_active_drawing"):
         state["up_geom"] = out["last_active_drawing"]["geometry"]

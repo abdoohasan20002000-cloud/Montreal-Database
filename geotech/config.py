@@ -21,6 +21,10 @@ CRS_WGS84 = "EPSG:4326"
 ISLAND_BBOX = {"lon_min": -73.99, "lon_max": -73.46, "lat_min": 45.40, "lat_max": 45.71}
 SHORE_TOLERANCE_M = 250
 
+# Credit shown on the home page and at the foot of the sidebar. Leave a field empty to hide it.
+CREDITS = {"name": "", "role": "", "supervisor": ""}
+DATA_CREDIT = ("Measured Vs: Rosset et al. compilation · Borehole archive: City of Montréal, MTQ and MELCC")
+
 PRE_MODERN_YEAR = 1960  # pre-1960 SPT N reads about half of modern values (era multiplier ~1.7)
 VS30_MIN, VS30_MAX = 100, 3000
 

@@ -37,18 +37,16 @@ with st.container(border=True):
 pt = state.get("sr_point")
 left, right = st.columns([1.15, 1], gap="large")
 with left:
-    m = folium.Map(location=[pt["lat"], pt["lng"]] if pt else [45.55, -73.66], zoom_start=13 if pt else 11,
-                   tiles=None, control_scale=True)
-    folium.TileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", name="Light",
-                     attr="© OpenStreetMap contributors © CARTO").add_to(m)
+    m = ui.base_map((pt["lat"], pt["lng"]) if pt else (45.55, -73.66), 13 if pt else 11)
     for r in sites.dropna(subset=["vs30_ms"]).to_dict("records"):
         folium.CircleMarker([r["lat"], r["lon"]], radius=5, color="#ffffff", weight=1.2, fill=True, fill_opacity=0.95,
-                            fill_color=ui.SITE_CLASS_COLOURS.get(ui.nbcc_class(r["vs30_ms"]), "#999"),
+                            fill_color=ui.SITE_CLASS_COLOURS.get(ui.nbcc_class(r["vs30_ms"]), ui.ERA_COLOURS["undated"]),
                             tooltip=f"{r['site_id']} · {r['vs30_ms']:.0f} m/s").add_to(m)
     if pt:
-        folium.Circle([pt["lat"], pt["lng"]], radius=radius, color="#0e7c86", weight=2, dash_array="6 4",
-                      fill=True, fill_opacity=0.06).add_to(m)
-        folium.Marker([pt["lat"], pt["lng"]], icon=folium.Icon(color="darkblue", icon="crosshairs", prefix="fa")).add_to(m)
+        folium.Circle([pt["lat"], pt["lng"]], radius=radius, color=ui.ACCENT, weight=2, dash_array="6 4",
+                      fill=True, fill_color=ui.ACCENT, fill_opacity=0.06).add_to(m)
+        folium.Marker([pt["lat"], pt["lng"]], icon=ui.target_icon(), tooltip="Report location").add_to(m)
+    folium.LayerControl(collapsed=True, position="topright").add_to(m)
     out = st_folium(m, height=470, use_container_width=True, returned_objects=["last_clicked"], key="sr_map")
     if how == "Click the map" and out and out.get("last_clicked") and out["last_clicked"] != state.get("sr_point"):
         state["sr_point"] = out["last_clicked"]
@@ -82,11 +80,12 @@ with right:
         (f"≈ {est:.0f} m/s" if est else "–", "Vs30 here (interpolated)",
          f"from {n_used} sites, not measured" if est else "no sites in radius", ui.SITE_CLASS_COLOURS["C"]),
         (cls or "–", "NBCC class (derived)", insight.CLASS_WORDS.get(cls, "needs a Vs30"),
-         ui.SITE_CLASS_COLOURS.get(cls, "#8a94a0")),
+         ui.SITE_CLASS_COLOURS.get(cls, ui.ERA_COLOURS["undated"])),
         (f"{p_near['site_id'].nunique()}", "Vs profiles nearby", f"{len(p_near)} depth readings", ui.SITE_CLASS_COLOURS["D"]),
     ])
     text = insight.summary(lat, lon, radius, near, est, n_used, len(p_near), p_near["site_id"].nunique(), bh_near, on_island)
-    st.markdown('<span class="gx-badge gx-derived">SUMMARY</span>', unsafe_allow_html=True)
+    st.markdown('<span class="gx-badge gx-interpolated">SUMMARY</span><span class="gx-note">includes interpolated '
+                'and derived values, labelled in the text</span>', unsafe_allow_html=True)
     st.write(text)
 
 # ---- details -----------------------------------------------------------------------------
@@ -115,11 +114,14 @@ with b:
         if not p_near.empty:
             layers.append(alt.Chart(p_near).mark_circle(size=30, opacity=0.75).encode(
                 x=alt.X("vs_ms:Q", title="Vs (m/s)"), y=alt.Y("depth_m:Q", title="Depth (m)", scale=alt.Scale(reverse=True)),
-                color=alt.Color("site_id:N", title="Profile"), tooltip=["site_id", "method", "depth_m", "vs_ms", "vs_status"]))
+                color=alt.Color("site_id:N", title="Profile", scale=alt.Scale(range=ui.CATEGORICAL)),
+                tooltip=["site_id", "method", "depth_m", "vs_ms", "vs_status"]))
         if not curves.empty:
-            layers.append(alt.Chart(curves).mark_line(strokeWidth=2, color="#1c2430").encode(
+            layers.append(alt.Chart(curves).mark_line(strokeWidth=2, color=ui.INK).encode(
                 x="vs_ms:Q", y=alt.Y("depth_m:Q", scale=alt.Scale(reverse=True)), order="depth_m:Q",
-                strokeDash=alt.StrokeDash("fit:N", title="Fit"), tooltip=["fit", "equation"]))
+                strokeDash=alt.StrokeDash("fit:N", title="Fit", scale=alt.Scale(
+                    domain=["clay (Rosset fit)", "sand (Rosset fit)"], range=[[1, 0], [5, 4]])),
+                tooltip=["fit", "equation"]))
         st.altair_chart(alt.layer(*layers).properties(height=320), width="stretch")
 
 table = insight.report_table(lat, lon, x, y, radius, near, est, n_used)

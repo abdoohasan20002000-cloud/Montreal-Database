@@ -14,7 +14,7 @@ from geotech.config import PRE_MODERN_YEAR
 
 state = st.session_state
 
-ui.hero("Explore the island",
+ui.hero("Map and 3D",
         "Pick a spot, draw an area or take the whole island to see the boreholes, SPT samples, measured shear-wave "
         "velocities and contributed files there, then download them in one zip.",
         chips=["Coordinates <b>MTM 8</b> · EPSG:32188", "Vs30 <b>measured</b> and <b>estimated</b> kept apart",
@@ -22,7 +22,7 @@ ui.hero("Explore the island",
 
 # ---- data ---------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("#### Filters")
+    ui.sidebar_label("Filters")
     eras = st.multiselect("Borehole era", ["pre-1960", "1960 and later", "undated"],
                           default=["pre-1960", "1960 and later", "undated"],
                           help=f"Before {PRE_MODERN_YEAR}, SPT N read about half of modern values.")
@@ -52,10 +52,11 @@ if not vs_sites.empty:
 # ---- controls -------------------------------------------------------------------
 with st.container(border=True):
     c0, c1, c2, c3 = st.columns([0.9, 1.6, 1.3, 1.2], vertical_alignment="bottom")
-    view = c0.segmented_control("View", ["Map", "3D"], default="Map", key="view") or "Map"
+    view = c0.segmented_control("View", ["2D map", "3D relief"], default="2D map", key="view") or "2D map"
+    is_3d = view == "3D relief"
     mode = c1.segmented_control("Area", ["Whole island", "Circle", "Draw"],
-                                default="Whole island", key="mode", disabled=view == "3D") or "Whole island"
-    radius = c2.slider("Radius (m)", 100, 5000, 500, 100, disabled=mode != "Circle" or view == "3D")
+                                default="Whole island", key="mode", disabled=is_3d) or "Whole island"
+    radius = c2.slider("Radius (m)", 100, 5000, 500, 100, disabled=mode != "Circle" or is_3d)
     colour_by = c3.selectbox("Colour boreholes by", ["Era", "Site class (estimated)"])
     e1, e2, e3 = st.columns([1.9, 1.2, 1.3], vertical_alignment="bottom")
     layers = e1.pills("Layers", ["Boreholes", "Measured Vs30", "Files"], selection_mode="multi",
@@ -63,10 +64,10 @@ with st.container(border=True):
     hint = {"Circle": "Click the map to place the centre of the circle.",
             "Draw": "Use the rectangle or polygon tool at the top left of the map.",
             "Whole island": "Everything on the island is selected."}[mode]
-    if view == "3D":
+    if is_3d:
         hint = ("3D view: drag to pan, right-drag (or Ctrl-drag) to tilt and rotate, scroll to zoom. "
-                "Switch to Map to change the selection.")
-        surface = e2.selectbox("Surface", ["Satellite", "Street map", "Relief only"], key="surface")
+                "Switch to 2D map to change the selection.")
+        surface = e2.selectbox("Surface", ["Dark map", "Satellite", "Relief only"], key="surface")
         exaggeration = e3.slider("Vertical exaggeration", 1, 15, 6,
                                  help="Montréal is fairly flat (Mont Royal is about 230 m), so relief is stretched "
                                       "to be visible. Symbol heights are not to scale.")
@@ -77,23 +78,15 @@ area = data.selection_from_inputs({"Circle": "Point and radius", "Draw": "Draw a
 
 # ---- map ------------------------------------------------------------------------
 def build_map():
-    m = folium.Map(location=[45.55, -73.68], zoom_start=11, tiles=None, control_scale=True)
-    folium.TileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", name="Light",
-                     attr="© OpenStreetMap contributors © CARTO", max_zoom=20).add_to(m)
-    folium.TileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                     name="Satellite", attr="Imagery © Esri", max_zoom=19, show=False).add_to(m)
-    folium.TileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", name="Topographic (relief)",
-                     attr="© OpenStreetMap contributors, SRTM · style © OpenTopoMap (CC-BY-SA)", max_zoom=17,
-                     show=False).add_to(m)
-    folium.TileLayer("OpenStreetMap", name="Streets", show=False).add_to(m)
+    m = ui.base_map((45.55, -73.68), 11)
     b = config.ISLAND_BBOX
     m.fit_bounds([[b["lat_min"], b["lon_min"]], [b["lat_max"], b["lon_max"]]])
 
     if "Boreholes" in (layers or []) and not bh.empty:
         def colour(row):
             if colour_by == "Era":
-                return ui.ERA_COLOURS.get(row["data_era"], "#8a94a0")
-            return ui.SITE_CLASS_COLOURS.get(str(row.get("site_class", ""))[:1], "#c4c9cf")
+                return ui.ERA_COLOURS.get(row["data_era"], ui.ERA_COLOURS["undated"])
+            return ui.SITE_CLASS_COLOURS.get(str(row.get("site_class", ""))[:1], ui.ERA_COLOURS["undated"])
         tip_cols = [c for c in ["hole_id", "year", "source", "data_era", "vs30_ms", "site_class"] if c in bh.columns]
         feats = []
         for rec in bh.assign(_c=bh.apply(colour, axis=1))[tip_cols + ["lon", "lat", "_c"]].to_dict("records"):
@@ -102,7 +95,7 @@ def build_map():
             feats.append({"type": "Feature", "properties": props,
                           "geometry": {"type": "Point", "coordinates": [rec["lon"], rec["lat"]]}})
         folium.GeoJson({"type": "FeatureCollection", "features": feats}, name="Boreholes",
-                       marker=folium.CircleMarker(radius=3, weight=0, fill=True, fill_opacity=0.85),
+                       marker=folium.CircleMarker(radius=3, weight=0, fill=True, fill_opacity=0.9),
                        style_function=lambda f: {"fillColor": f["properties"]["_c"], "color": f["properties"]["_c"]},
                        tooltip=folium.GeoJsonTooltip(fields=tip_cols)).add_to(m)
 
@@ -110,23 +103,23 @@ def build_map():
         fg = folium.FeatureGroup(name="Measured Vs30 sites").add_to(m)
         for r in vs_sites.to_dict("records"):
             has = pd.notna(r["vs30_ms"])
-            fill = ui.SITE_CLASS_COLOURS.get(r["site_class_from_measured"], "#ffffff") if has else "#ffffff"
+            fill = ui.SITE_CLASS_COLOURS.get(r["site_class_from_measured"], ui.SURFACE) if has else ui.SURFACE
             tip = (f"<b>{r['site_id']}</b> · {r['area']}<br>Vs30 {r['vs30_ms']:.0f} m/s (measured), class "
                    f"{r['site_class_from_measured']}<br>{r['survey_type']}" if has
                    else f"<b>{r['site_id']}</b> · {r['area']}<br>no Vs30 value in the source")
-            folium.CircleMarker([r["lat"], r["lon"]], radius=6, color="#ffffff" if has else ui.VS_COLOUR, weight=1.5,
+            folium.CircleMarker([r["lat"], r["lon"]], radius=6, color="#ffffff" if has else ui.VS_COLOUR, weight=1.6,
                                 fill=True, fill_color=fill, fill_opacity=0.95, tooltip=tip).add_to(fg)
 
     if "Files" in (layers or []) and uploads:
         fg = folium.FeatureGroup(name="Contributed files").add_to(m)
         for r in uploads:
             folium.Marker([r["lat"], r["lon"]], tooltip=f"{r['data_type']}: {r['title']}",
-                          icon=folium.Icon(color="purple", icon="file", prefix="fa")).add_to(fg)
+                          icon=ui.pin_icon(ui.UPLOAD_COLOUR)).add_to(fg)
 
     if area not in (None, "incomplete"):
         folium.GeoJson(mapping(geo.shp_transform_to_wgs84(area)), name="Selection",
-                       style_function=lambda f: {"color": "#0e7c86", "weight": 2.5, "dashArray": "6 4",
-                                                 "fillColor": "#0e7c86", "fillOpacity": 0.08}).add_to(m)
+                       style_function=lambda f: {"color": ui.ACCENT, "weight": 2.5, "dashArray": "6 4",
+                                                 "fillColor": ui.ACCENT, "fillOpacity": 0.07}).add_to(m)
     if mode == "Draw":
         Draw(export=False, draw_options={"polyline": False, "circlemarker": False, "marker": False,
                                          "circle": False}).add_to(m)
@@ -141,25 +134,28 @@ def legend_html():
         rows += [(c, k, "dot") for k, c in ui.ERA_COLOURS.items()]
     else:
         rows += [(c, f"Class {k} (estimated)", "dot") for k, c in ui.SITE_CLASS_COLOURS.items() if k != "F"]
-    rows += [("#3f6e9e", "Measured Vs30 site", "ring"), (ui.UPLOAD_COLOUR, "Contributed file", "pin")]
+    rows += [(ui.VS_COLOUR, "Measured Vs30 site", "ring"), (ui.UPLOAD_COLOUR, "Contributed file", "pin")]
     classes = "".join(f'<span title="Class {k}" style="display:inline-flex;align-items:center;justify-content:center;'
-                      f'width:18px;height:14px;background:{c};color:#fff;font-size:10px;border-radius:2px">{k}</span>'
-                      for k, c in ui.SITE_CLASS_COLOURS.items() if k != "F")
+                      f'width:20px;height:15px;background:{c};color:{ui._text_on(c)};font-size:10px;font-weight:700;'
+                      f'border-radius:3px">{k}</span>' for k, c in ui.SITE_CLASS_COLOURS.items() if k != "F")
     items = "".join(
         f'<div style="display:flex;align-items:center;gap:7px;margin:2px 0">'
         f'<span style="width:10px;height:10px;border-radius:50%;background:{c};'
         f'{"border:2px solid #fff;box-shadow:0 0 0 1px " + c + ";" if kind == "ring" else ""}'
-        f'{"border-radius:2px;" if kind == "pin" else ""}"></span>{t}</div>' for c, t, kind in rows)
-    return ('<div style="position:absolute;top:88px;left:10px;z-index:9999;background:rgba(255,255,255,0.94);'
-            'padding:9px 12px;border-radius:10px;font:12px/1.35 \'IBM Plex Sans\',system-ui,sans-serif;color:#1c2430;'
-            'box-shadow:0 1px 6px rgba(0,0,0,0.15)"><div style="font-weight:600;margin-bottom:4px">Legend</div>'
-            + items + '<div style="margin-top:5px;color:#5d6876">Vs30 site fill = NBCC class</div>'
-            f'<div style="display:flex;gap:2px;margin-top:2px">{classes}</div></div>')
+        f'{"border-radius:50% 50% 50% 0;transform:rotate(-45deg);" if kind == "pin" else ""}"></span>{t}</div>'
+        for c, t, kind in rows)
+    return ('<div style="position:absolute;top:88px;left:10px;z-index:9999;background:rgba(10,21,32,0.92);'
+            'padding:10px 13px;border-radius:12px;font:12px/1.4 Inter,system-ui,sans-serif;color:#e6edf3;'
+            'border:1px solid #1c3a4d;box-shadow:0 8px 24px rgba(0,0,0,0.45)">'
+            '<div style="font:500 10px/1.2 \'JetBrains Mono\',monospace;letter-spacing:.2em;color:#7d8fa0;'
+            'text-transform:uppercase;margin-bottom:6px">Legend</div>'
+            + items + '<div style="margin-top:6px;color:#a9b8c6">Vs30 site fill = NBCC class</div>'
+            f'<div style="display:flex;gap:3px;margin-top:3px">{classes}</div></div>')
 
 
 SURFACES = {
+    "Dark map": "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
     "Satellite": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    "Street map": "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
     "Relief only": None,
 }
 
@@ -176,7 +172,7 @@ def build_3d():
         "TerrainLayer",
         elevation_decoder={"rScaler": 256 * ex, "gScaler": ex, "bScaler": ex / 256, "offset": -32768 * ex},
         elevation_data=terrain.TERRARIUM_URL,
-        texture=SURFACES[surface], color=[200, 192, 170], max_zoom=14, strategy="no-overlap",
+        texture=SURFACES[surface], color=[64, 98, 124], max_zoom=14, strategy="no-overlap",
     )]
 
     def ground(df):
@@ -186,7 +182,7 @@ def build_3d():
         v = vs_sites.dropna(subset=["vs30_ms"]).copy()
         v["z"] = ground(v)
         v["h"] = v["vs30_ms"] * 1.5
-        v["fill"] = [rgb(ui.SITE_CLASS_COLOURS.get(c, "#888888")) for c in v["site_class_from_measured"]]
+        v["fill"] = [rgb(ui.SITE_CLASS_COLOURS.get(c, ui.ERA_COLOURS["undated"])) for c in v["site_class_from_measured"]]
         v["tip"] = v.apply(lambda r: f"{r.site_id} · {r.area}<br/>Vs30 {r.vs30_ms:.0f} m/s (measured), "
                                      f"class {r.site_class_from_measured}<br/>{r.survey_type}", axis=1)
         layers.append(pdk.Layer("ColumnLayer", v[["lon", "lat", "z", "h", "fill", "tip"]],
@@ -196,7 +192,7 @@ def build_3d():
     if "Boreholes" in (layers_on or []) and not bh.empty:
         b = bh.copy()
         b["z"] = ground(b)
-        b["fill"] = [rgb(ui.ERA_COLOURS.get(e, "#8a94a0")) for e in b["data_era"]]
+        b["fill"] = [rgb(ui.ERA_COLOURS.get(e, ui.ERA_COLOURS["undated"])) for e in b["data_era"]]
         b["tip"] = b["hole_id"].astype(str) + "<br/>" + b["data_era"].astype(str)
         layers.append(pdk.Layer("ColumnLayer", b[["lon", "lat", "z", "fill", "tip"]], get_position=["lon", "lat", "z"],
                                 get_elevation=120, radius=28, disk_resolution=8, extruded=True,
@@ -211,7 +207,7 @@ def build_3d():
         ring = np.asarray(geo.shp_transform_to_wgs84(area).exterior.coords)
         zr = np.nan_to_num(terrain.elevation(ring[:, 0], ring[:, 1]), nan=0.0) * ex + 25
         layers.append(pdk.Layer("PathLayer", [{"path": [[x, y, z] for (x, y), z in zip(ring, zr)]}],
-                                get_path="path", get_color=[14, 124, 134, 255], get_width=5, width_units="pixels"))
+                                get_path="path", get_color=rgb(ui.ACCENT, 255), get_width=5, width_units="pixels"))
     view_state = pdk.ViewState(latitude=45.525, longitude=-73.64, zoom=10.8, pitch=60, bearing=-25)
     return pdk.Deck(layers=layers, initial_view_state=view_state, map_style=None,
                     tooltip={"html": "{tip}", "style": {"fontSize": "12px"}})
@@ -221,7 +217,7 @@ layers_on = layers
 left, right = st.columns([2.35, 1], gap="medium")
 out = None
 with left:
-    if view == "3D":
+    if is_3d:
         st.pydeck_chart(build_3d(), height=640, width="stretch")
         st.markdown('<div class="gx-note">Terrain: AWS Terrain Tiles (SRTM and other public DEMs), stretched '
                     f'{exaggeration}× vertically. Column height shows measured Vs30 (taller = stiffer ground); '
@@ -280,7 +276,7 @@ with right:
                                             range=list(ui.SITE_CLASS_COLOURS.values())),
                             legend=alt.Legend(orient="bottom", direction="horizontal", title="NBCC class")),
             tooltip=[alt.Tooltip("count():Q", title="Sites"), alt.Tooltip("site_class_from_measured:N", title="Class")],
-        ).properties(height=210)
+        ).properties(height=250)
         st.altair_chart(chart, width="stretch")
 
     if not sel_bh.empty:
