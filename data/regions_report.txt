@@ -1,0 +1,8 @@
+regions.geojson: 34 regions from 34 features (19 Borough, 15 City)
+source: Limites administratives de l'agglomération de Montréal (arrondissements et villes liées)
+url: https://donnees.montreal.ca/dataset/9797a946-9da8-41ec-8815-f6b276dec7e9/resource/e18bfd07-edc8-4ce8-8a5a-3b617662a794/download/limites-administratives-agglomeration.geojson
+licence: CC BY 4.0 (Ville de Montréal open data)
+fetched on: 2026-10-13
+input coordinates: WGS84
+simplified 2 m in MTM 8; island outline = union of all regions, 619.2 km²
+regions: Ahuntsic-Cartierville; Anjou; Baie-D'Urfé; Beaconsfield; Côte-Saint-Luc; Côte-des-Neiges-Notre-Dame-de-Grâce; Dollard-des-Ormeaux; Dorval; Hampstead; Kirkland; L'Île-Bizard-Sainte-Geneviève; L'Île-Dorval; LaSalle; Lachine; Le Plateau-Mont-Royal; Le Sud-Ouest; Mercier-Hochelaga-Maisonneuve; Mont-Royal; Montréal-Est; Montréal-Nord; Montréal-Ouest; Outremont; Pierrefonds-Roxboro; Pointe-Claire; Rivière-des-Prairies-Pointe-aux-Trembles; Rosemont-La Petite-Patrie; Saint-Laurent; Saint-Léonard; Sainte-Anne-de-Bellevue; Senneville; Verdun; Ville-Marie; Villeray-Saint-Michel-Parc-Extension; Westmount
