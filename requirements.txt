@@ -1,0 +1,8 @@
+streamlit>=1.40
+pandas>=2.2
+pyproj>=3.6
+shapely>=2.0
+folium>=0.17
+streamlit-folium>=0.22
+supabase>=2.6
+openpyxl>=3.1
