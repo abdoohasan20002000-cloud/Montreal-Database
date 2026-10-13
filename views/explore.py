@@ -1,13 +1,15 @@
 """Explore: the map, a selection, what is in it, and one download."""
 import altair as alt
 import folium
+import numpy as np
 import pandas as pd
+import pydeck as pdk
 import streamlit as st
 from folium.plugins import Draw
 from shapely.geometry import mapping
 from streamlit_folium import st_folium
 
-from geotech import bundle, config, data, geo, ui
+from geotech import bundle, config, data, geo, terrain, ui
 from geotech.config import PRE_MODERN_YEAR
 
 state = st.session_state
@@ -49,16 +51,25 @@ if not vs_sites.empty:
 
 # ---- controls -------------------------------------------------------------------
 with st.container(border=True):
-    c1, c2, c3, c4 = st.columns([1.5, 1.2, 1.6, 1.1], vertical_alignment="bottom")
+    c0, c1, c2, c3 = st.columns([0.9, 1.6, 1.3, 1.2], vertical_alignment="bottom")
+    view = c0.segmented_control("View", ["Map", "3D"], default="Map", key="view") or "Map"
     mode = c1.segmented_control("Area", ["Whole island", "Circle", "Draw"],
-                                default="Whole island", key="mode") or "Whole island"
-    radius = c2.slider("Radius (m)", 100, 5000, 500, 100, disabled=mode != "Circle")
-    layers = c3.pills("Layers", ["Boreholes", "Measured Vs30", "Files"], selection_mode="multi",
+                                default="Whole island", key="mode", disabled=view == "3D") or "Whole island"
+    radius = c2.slider("Radius (m)", 100, 5000, 500, 100, disabled=mode != "Circle" or view == "3D")
+    colour_by = c3.selectbox("Colour boreholes by", ["Era", "Site class (estimated)"])
+    e1, e2, e3 = st.columns([1.9, 1.2, 1.3], vertical_alignment="bottom")
+    layers = e1.pills("Layers", ["Boreholes", "Measured Vs30", "Files"], selection_mode="multi",
                       default=["Boreholes", "Measured Vs30", "Files"], key="layers")
-    colour_by = c4.selectbox("Colour boreholes by", ["Era", "Site class (estimated)"])
     hint = {"Circle": "Click the map to place the centre of the circle.",
             "Draw": "Use the rectangle or polygon tool at the top left of the map.",
             "Whole island": "Everything on the island is selected."}[mode]
+    if view == "3D":
+        hint = ("3D view: drag to pan, right-drag (or Ctrl-drag) to tilt and rotate, scroll to zoom. "
+                "Switch to Map to change the selection.")
+        surface = e2.selectbox("Surface", ["Satellite", "Street map", "Relief only"], key="surface")
+        exaggeration = e3.slider("Vertical exaggeration", 1, 15, 6,
+                                 help="Montréal is fairly flat (Mont Royal is about 230 m), so relief is stretched "
+                                      "to be visible. Symbol heights are not to scale.")
     st.markdown(f'<div class="gx-note">{hint}</div>', unsafe_allow_html=True)
 
 area = data.selection_from_inputs({"Circle": "Point and radius", "Draw": "Draw an area"}.get(mode, mode),
@@ -71,6 +82,9 @@ def build_map():
                      attr="© OpenStreetMap contributors © CARTO", max_zoom=20).add_to(m)
     folium.TileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
                      name="Satellite", attr="Imagery © Esri", max_zoom=19, show=False).add_to(m)
+    folium.TileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", name="Topographic (relief)",
+                     attr="© OpenStreetMap contributors, SRTM · style © OpenTopoMap (CC-BY-SA)", max_zoom=17,
+                     show=False).add_to(m)
     folium.TileLayer("OpenStreetMap", name="Streets", show=False).add_to(m)
     b = config.ISLAND_BBOX
     m.fit_bounds([[b["lat_min"], b["lon_min"]], [b["lat_max"], b["lon_max"]]])
@@ -143,10 +157,78 @@ def legend_html():
             f'<div style="display:flex;gap:2px;margin-top:2px">{classes}</div></div>')
 
 
+SURFACES = {
+    "Satellite": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    "Street map": "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "Relief only": None,
+}
+
+
+def rgb(hex_colour, alpha=235):
+    h = hex_colour.lstrip("#")
+    return [int(h[i:i + 2], 16) for i in (0, 2, 4)] + [alpha]
+
+
+def build_3d():
+    """Terrain from AWS Terrain Tiles, with data standing on it as columns."""
+    ex = float(exaggeration)
+    layers = [pdk.Layer(
+        "TerrainLayer",
+        elevation_decoder={"rScaler": 256 * ex, "gScaler": ex, "bScaler": ex / 256, "offset": -32768 * ex},
+        elevation_data=terrain.TERRARIUM_URL,
+        texture=SURFACES[surface], color=[200, 192, 170], max_zoom=14, strategy="no-overlap",
+    )]
+
+    def ground(df):
+        return np.nan_to_num(terrain.elevation(df["lon"].to_numpy(), df["lat"].to_numpy()), nan=0.0) * ex
+
+    if "Measured Vs30" in (layers_on or []) and not vs_sites.empty:
+        v = vs_sites.dropna(subset=["vs30_ms"]).copy()
+        v["z"] = ground(v)
+        v["h"] = v["vs30_ms"] * 1.5
+        v["fill"] = [rgb(ui.SITE_CLASS_COLOURS.get(c, "#888888")) for c in v["site_class_from_measured"]]
+        v["tip"] = v.apply(lambda r: f"{r.site_id} · {r.area}<br/>Vs30 {r.vs30_ms:.0f} m/s (measured), "
+                                     f"class {r.site_class_from_measured}<br/>{r.survey_type}", axis=1)
+        layers.append(pdk.Layer("ColumnLayer", v[["lon", "lat", "z", "h", "fill", "tip"]],
+                                get_position=["lon", "lat", "z"], get_elevation="h", elevation_scale=1,
+                                radius=110, disk_resolution=16, extruded=True, get_fill_color="fill",
+                                pickable=True, auto_highlight=True))
+    if "Boreholes" in (layers_on or []) and not bh.empty:
+        b = bh.copy()
+        b["z"] = ground(b)
+        b["fill"] = [rgb(ui.ERA_COLOURS.get(e, "#8a94a0")) for e in b["data_era"]]
+        b["tip"] = b["hole_id"].astype(str) + "<br/>" + b["data_era"].astype(str)
+        layers.append(pdk.Layer("ColumnLayer", b[["lon", "lat", "z", "fill", "tip"]], get_position=["lon", "lat", "z"],
+                                get_elevation=120, radius=28, disk_resolution=8, extruded=True,
+                                get_fill_color="fill", pickable=True))
+    if "Files" in (layers_on or []) and uploads:
+        f = pd.DataFrame([{"lon": r["lon"], "lat": r["lat"], "tip": f"{r['data_type']}: {r['title']}"} for r in uploads])
+        f["z"] = ground(f)
+        layers.append(pdk.Layer("ColumnLayer", f, get_position=["lon", "lat", "z"], get_elevation=260, radius=60,
+                                disk_resolution=4, extruded=True, get_fill_color=rgb(ui.UPLOAD_COLOUR),
+                                pickable=True))
+    if area not in (None, "incomplete"):
+        ring = np.asarray(geo.shp_transform_to_wgs84(area).exterior.coords)
+        zr = np.nan_to_num(terrain.elevation(ring[:, 0], ring[:, 1]), nan=0.0) * ex + 25
+        layers.append(pdk.Layer("PathLayer", [{"path": [[x, y, z] for (x, y), z in zip(ring, zr)]}],
+                                get_path="path", get_color=[14, 124, 134, 255], get_width=5, width_units="pixels"))
+    view_state = pdk.ViewState(latitude=45.525, longitude=-73.64, zoom=10.8, pitch=60, bearing=-25)
+    return pdk.Deck(layers=layers, initial_view_state=view_state, map_style=None,
+                    tooltip={"html": "{tip}", "style": {"fontSize": "12px"}})
+
+
+layers_on = layers
 left, right = st.columns([2.35, 1], gap="medium")
+out = None
 with left:
-    out = st_folium(build_map(), height=640, use_container_width=True,
-                    returned_objects=["last_clicked", "last_active_drawing"], key="atlas_map")
+    if view == "3D":
+        st.pydeck_chart(build_3d(), height=640, use_container_width=True)
+        st.markdown('<div class="gx-note">Terrain: AWS Terrain Tiles (SRTM and other public DEMs), stretched '
+                    f'{exaggeration}× vertically. Column height shows measured Vs30 (taller = stiffer ground); '
+                    'columns stand on the terrain surface for display only.</div>', unsafe_allow_html=True)
+    else:
+        out = st_folium(build_map(), height=640, use_container_width=True,
+                        returned_objects=["last_clicked", "last_active_drawing"], key="atlas_map")
 if out:
     changed = False
     if mode == "Circle" and out.get("last_clicked") and out["last_clicked"] != state.get("click"):
@@ -190,7 +272,8 @@ with right:
     if not vs_vals.empty:
         ui.panel_title("Measured Vs30 distribution")
         chart = alt.Chart(vs_vals).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
-            x=alt.X("vs30_ms:Q", bin=alt.Bin(step=100), title="Vs30 (m/s, measured)"),
+            x=alt.X("vs30_ms:Q", bin=alt.Bin(step=100), title="Vs30 (m/s, measured)",
+                  axis=alt.Axis(labelOverlap="greedy", values=[0, 500, 1000, 1500])),
             y=alt.Y("count():Q", title="Sites"),
             color=alt.Color("site_class_from_measured:N", title="Class",
                             scale=alt.Scale(domain=list(ui.SITE_CLASS_COLOURS),
