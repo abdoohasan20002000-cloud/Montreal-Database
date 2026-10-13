@@ -3,6 +3,7 @@
 Reads data/source/ROSSET_Vs_ALL_CONSOLIDATED.xlsx and writes:
   data/vs30_sites.csv      one row per site with a location (06b_SITE_VS30_2021), in MTM 8 and WGS84
   data/vs_profiles.csv     Vs-depth profiles (downhole, MASW, minivib), located where the site is known
+  data/vs_regressions.csv  Vs-depth regression coefficients (sheet 04), with the equation form
   data/vs_prepare_report.txt   what was checked and what was left out
 
 Usage: python scripts/prepare_rosset_vs.py
@@ -140,4 +141,20 @@ note(f"  method blank in source: {int((pr['method'] == 'not stated').sum())} row
 note(f"  Vs outside 50-3500 m/s: {int(vs_out.sum())}; bad depth: {int(bad_depth.sum())} (LM04-1, depth -0.04 m, kept and flagged).")
 note("Not used: UTM27 coordinates on sheet 06_SITE_METADATA (source notes LM04-1 easting 275,585 is impossible "
      "for UTM 18; only 9 sites have them). Location comes from the WGS84 coordinates on sheet 06b instead.")
+# ---- regressions ------------------------------------------------------------------
+rg = pd.read_excel(x, "04_REGRESSION_FITS", header=2).rename(columns=str.lower)
+rg = rg.rename(columns={"source_sheet": "fit", "value": "value"})
+# Sheet 04 names the TableCurve model but not always its equation. For reg_sand and reg_clay the form
+# Vs = a + b * z^c reproduces the published Table 3 relations and fits the clay points (R² 0.45) far better
+# than Vs = a * z^c, so it is recorded here as INFERRED. Minivib fits state y = a + b * x^0.5 where given.
+FORMS = {"reg_sand": "Vs = a + b*z^c (inferred)", "reg_clay": "Vs = a + b*z^c (inferred)",
+         "power_NDE": "Vs = a + b*z^0.5 (stated)", "power_NDW": "Vs = a + b*z^0.5 (stated)"}
+rg["equation"] = rg["fit"].map(FORMS).fillna("not stated in the source")
+rg["soil_or_line"] = rg["fit"].map({"reg_sand": "sand", "reg_clay": "clay"}).fillna(rg["fit"])
+rg["source"] = SOURCE
+rg["processed_on"] = TODAY
+rg.to_csv(OUT / "vs_regressions.csv", index=False)
+note(f"vs_regressions.csv: {rg['fit'].nunique()} fits; equation form inferred for reg_sand and reg_clay "
+     "(Vs = a + b*z^c), stated for power_NDE/NDW, not stated for the other minivib fits.")
+
 (OUT / "vs_prepare_report.txt").write_text("\n".join(report) + "\n", encoding="utf-8")

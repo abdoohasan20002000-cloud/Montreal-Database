@@ -77,3 +77,26 @@ def test_measured_vs_tables_follow_project_rules():
 def test_no_archive_means_empty_not_demo():
     bh, _, label = data.load_archive(False)
     assert bh.empty and label == "none"
+
+
+def test_site_report_estimates_are_labelled_and_sane():
+    from geotech import insight
+    sites, _ = data.load_vs()
+    x, y = geo.wgs84_to_mtm8(-73.556, 45.557)  # Botanical Garden line
+    near = insight.neighbours(sites, x, y, 2000)
+    est, n = insight.idw_vs30(near)
+    assert n > 0 and near["vs30_ms"].min() <= est <= near["vs30_ms"].max()
+    table = insight.report_table(45.557, -73.556, x, y, 2000, near, est, n)
+    assert set(table["status"]) >= {"measured", "interpolated", "derived"}
+    text = insight.summary(45.557, -73.556, 2000, near, est, n, 0, 0, None, True)
+    assert "INTERPOLATED" in text and "not a measurement" in text
+    empty = insight.neighbours(sites, *geo.wgs84_to_mtm8(-74.5, 46.5), 1000)
+    assert insight.idw_vs30(empty) == (None, 0)
+
+
+def test_regression_curves_match_published_coefficients():
+    from geotech import insight
+    c = insight.regression_curves(insight.load_regressions())
+    sand = c[c["fit"].str.startswith("sand")].set_index("depth_m")["vs_ms"]
+    z = sand.index[0]
+    assert abs(sand.iloc[0] - (144.808986 + 36.806129 * z ** 0.570622)) < 1e-6

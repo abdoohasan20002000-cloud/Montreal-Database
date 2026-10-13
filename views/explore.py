@@ -222,7 +222,7 @@ left, right = st.columns([2.35, 1], gap="medium")
 out = None
 with left:
     if view == "3D":
-        st.pydeck_chart(build_3d(), height=640, use_container_width=True)
+        st.pydeck_chart(build_3d(), height=640, width="stretch")
         st.markdown('<div class="gx-note">Terrain: AWS Terrain Tiles (SRTM and other public DEMs), stretched '
                     f'{exaggeration}× vertically. Column height shows measured Vs30 (taller = stiffer ground); '
                     'columns stand on the terrain surface for display only.</div>', unsafe_allow_html=True)
@@ -281,7 +281,7 @@ with right:
                             legend=alt.Legend(orient="bottom", direction="horizontal", title="NBCC class")),
             tooltip=[alt.Tooltip("count():Q", title="Sites"), alt.Tooltip("site_class_from_measured:N", title="Class")],
         ).properties(height=210)
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart, width="stretch")
 
     if not sel_bh.empty:
         ui.panel_title("Boreholes by era")
@@ -290,18 +290,18 @@ with right:
             y=alt.Y("era:N", title=None, sort="-x"), x=alt.X("n:Q", title="Boreholes"),
             color=alt.Color("era:N", legend=None, scale=alt.Scale(domain=list(ui.ERA_COLOURS),
                                                                   range=list(ui.ERA_COLOURS.values()))),
-        ).properties(height=110), use_container_width=True)
+        ).properties(height=110), width="stretch")
 
     ui.panel_title("Download")
     zip_key = (area_label, label, len(sel_bh), len(sel_up), len(sel_vs), len(sel_prof), show_far)
-    if st.button("Prepare zip for this selection", icon=":material/folder_zip:", use_container_width=True):
+    if st.button("Prepare zip for this selection", icon=":material/folder_zip:", width="stretch"):
         with st.spinner("Building zip…"):
             state["zip"] = (zip_key, bundle.build_zip(sel_bh, sel_s, sel_up, store.get_bytes, area_label, label,
                                                       sel_vs, sel_prof))
     if state.get("zip") and state["zip"][0] == zip_key:
         st.download_button("Download zip", state["zip"][1], file_name="montreal_geotech_selection.zip",
                            mime="application/zip", icon=":material/download:", type="primary",
-                           use_container_width=True)
+                           width="stretch")
     st.markdown('<div class="gx-note">CSV in MTM 8 with a WGS84 copy, the original files, a manifest and a '
                 'README with the caveats.</div>', unsafe_allow_html=True)
 
@@ -341,7 +341,7 @@ with tv:
                 chart = base.mark_point(filled=True, size=36, opacity=0.85)
                 if p["method"].iloc[0] != "Minivib":  # one vertical profile: join it; minivib lines mix many CMPs
                     chart = base.mark_line(strokeWidth=1.5, interpolate="step-before").encode(order="depth_m:Q") + chart
-                st.altair_chart(chart.properties(height=330), use_container_width=True)
+                st.altair_chart(chart.properties(height=330), width="stretch")
                 loc = p["location_basis"].iloc[0]
                 st.markdown(f'<div class="gx-note">{len(p)} points · location: {loc}</div>', unsafe_allow_html=True)
 with tb:

@@ -3,11 +3,16 @@
 A Streamlit app for the Island of Montréal borehole archive (6,961 boreholes, 39,285 SPT samples,
 1927–2009) and for files that contributors add.
 
-- **Map**: boreholes coloured by era or (estimated) site class, contributed files as pins.
+- **Explore**: a 2D map or a 3D relief view. Boreholes coloured by era or (estimated) site class, contributed files as pins.
   Pick the whole island, a point and radius, or draw an area; see counts and tables; download one zip
   (boreholes and SPT samples as CSV in MTM 8 with a WGS84 copy, the contributed files, a manifest, a README).
 - **Measured Vs**: 159 measured-Vs30 sites (blue rings) and Vs profiles from the Rosset workbook, kept apart from the
   archive's estimated Vs30. Rebuild with `python scripts/prepare_rosset_vs.py`; the checks are in `data/vs_prepare_report.txt`.
+- **Insights**: headline numbers, Vs with depth by soil against the Rosset sand and clay fits, measured Vs30 by area,
+  NBCC class mix (derived from measured Vs30), a 3D map of where measurements are dense or thin, and open data-quality flags.
+- **Site report**: pick a point (click, lat/long or MTM 8). It lists the measured Vs30 sites nearby, gives an
+  inverse-distance estimate of Vs30 labelled INTERPOLATED, the NBCC class derived from it, the Vs profiles nearby and a
+  plain-language summary. Every value carries status, method, source and date; download as Markdown or CSV.
 - **Upload**: any file type, placed on the map by click, drawing, coordinates (MTM 8 or lat/long) or an
   existing hole ID, with a metadata card (source, year of work, measured/derived/estimated, licence).
   Checks run at once: duplicate file, on the island, file opens, and for tables hole IDs, coordinates,

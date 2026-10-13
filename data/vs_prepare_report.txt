@@ -4,3 +4,4 @@ vs_profiles.csv: 2805 rows (2273 after dropping rows repeated between sheets), 7
   method blank in source: 4 rows (site MM09-2); labelled 'not stated', not guessed.
   Vs outside 50-3500 m/s: 0; bad depth: 2 (LM04-1, depth -0.04 m, kept and flagged).
 Not used: UTM27 coordinates on sheet 06_SITE_METADATA (source notes LM04-1 easting 275,585 is impossible for UTM 18; only 9 sites have them). Location comes from the WGS84 coordinates on sheet 06b instead.
+vs_regressions.csv: 8 fits; equation form inferred for reg_sand and reg_clay (Vs = a + b*z^c), stated for power_NDE/NDW, not stated for the other minivib fits.

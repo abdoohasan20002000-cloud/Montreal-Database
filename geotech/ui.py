@@ -14,11 +14,7 @@ VS_COLOUR = "#2e5aac"
 STRATA = ["#8d7b68", "#7f95a3", "#b9a77f", "#e0c58f", "#9b8c74", "#4b5563"]
 
 
-def nbcc_class(vs30):
-    """NBCC site class from Vs30 (A >1500, B >760, C >360, D >=180, E <180)."""
-    if vs30 is None or vs30 != vs30:
-        return None
-    return "A" if vs30 > 1500 else "B" if vs30 > 760 else "C" if vs30 > 360 else "D" if vs30 >= 180 else "E"
+from .insight import nbcc_class  # noqa: E402,F401  (re-exported for the pages)
 
 
 _CSS = """
@@ -96,13 +92,14 @@ def hero(title, subtitle, chips=()):
                 + _strata("gx-strata") + "</div>", unsafe_allow_html=True)
 
 
-def kpis(items):
+def kpis(items, cols=2):
     """items: (value, label, sub, colour)."""
     cards = "".join(
         f'<div class="gx-kpi" style="--c:{c}"><div class="v">{html.escape(str(v))}</div>'
         f'<div class="l">{html.escape(l)}</div><div class="s">{html.escape(s)}</div></div>'
         for v, l, s, c in items)
-    st.markdown(f'<div class="gx-kpis">{cards}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="gx-kpis" style="grid-template-columns:repeat({cols},minmax(0,1fr))">{cards}</div>',
+                unsafe_allow_html=True)
 
 
 def panel_title(text):
