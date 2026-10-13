@@ -17,6 +17,12 @@ downloads carry both, with MTM 8 as the reference.
   (Rosset et al. 2023), not measured. `vs30_status` says so on every row.
 - Every contributed file states whether its values are measured, derived, interpolated or estimated.
 
+**Measured Vs (Rosset compilation).** 159 sites with a Vs30 from field seismic surveys (landstreamer/MASW lines,
+downhole tests) and 2,273 Vs-depth rows. These are the only **measured** Vs values here. Downhole Vs is measured;
+MASW and minivib profiles are derived (inversion, travel times), and `vs_status` says which. Sites far off the
+island (Rougemont area and two others) are in the files but hidden until you tick the box. Profiles with no
+location in the source (for example MM05, MM11 to MM20, MP11) are only in the whole-island selection.
+
 **Pre-1960 data.** Before 1960, SPT N-values read about half of modern ones (era multiplier about 1.7).
 These holes are marked `data_era = pre-1960` and shown in orange on the map. Their raw N is kept.
 

@@ -22,6 +22,7 @@ bh, samples, label = ui.load_archive(demo)
 ui.archive_banner(label)
 store = ui.get_store()
 uploads = store.list(status="approved")
+vs_sites, vs_prof = ui.load_vs()
 
 # ---- filters and selection --------------------------------------------------
 with st.sidebar:
@@ -34,6 +35,10 @@ with st.sidebar:
         pick_src = st.multiselect("Source", sources, default=sources)
     else:
         pick_src = None
+    show_vs = st.checkbox("Measured Vs30 sites", value=True,
+                          help="Field seismic surveys (Rosset compilation). Measured, unlike the archive's estimated Vs30.")
+    show_far = st.checkbox("Include Vs sites outside the island box", value=False,
+                           help="Rougemont and two other sites lie off the island.")
     colour_by = st.radio("Colour boreholes by", ["Era", "Site class (estimated)"], horizontal=True)
 
     st.header("Selection")
@@ -75,6 +80,17 @@ if not bh.empty:
         tooltip=folium.GeoJsonTooltip(fields=tip_cols),
     ).add_to(m)
 
+if not vs_sites.empty:
+    if not show_far:
+        vs_sites = vs_sites[vs_sites["on_island"]]
+        vs_prof = vs_prof[vs_prof["on_island"].astype(str).isin(["True", "nan", "None"])]
+    if show_vs:
+        for rec in vs_sites[["site_id", "survey_type", "vs30_ms", "lat", "lon"]].to_dict("records"):
+            v = "no value" if pd.isna(rec["vs30_ms"]) else f"{rec['vs30_ms']:.0f} m/s"
+            folium.CircleMarker([rec["lat"], rec["lon"]], radius=5, color=ui.VS_COLOUR, weight=2, fill=True,
+                                fill_color="#ffffff", fill_opacity=0.9,
+                                tooltip=f"{rec['site_id']} · measured Vs30 {v} · {rec['survey_type']}").add_to(m)
+
 for r in uploads:
     folium.Marker([r["lat"], r["lon"]], tooltip=f"{r['data_type']}: {r['title']}",
                   icon=folium.Icon(color="purple", icon="file", prefix="fa")).add_to(m)
@@ -88,7 +104,7 @@ if mode == "Draw an area":
 
 legend = ("Orange: pre-1960 · Green: 1960 and later · Grey: undated" if colour_by == "Era"
           else "Site class (estimated): A dark blue → E orange, F red · Grey: none")
-st.caption(f"{legend} · Purple pins: contributed files")
+st.caption(f"{legend} · Blue rings: measured Vs30 sites · Purple pins: contributed files")
 out = st_folium(m, height=560, use_container_width=True, returned_objects=["last_clicked", "last_active_drawing"])
 if out:
     changed = False
@@ -109,17 +125,24 @@ if area == "incomplete":
 sel_bh = data.points_in(bh, area)
 sel_s = samples[samples["hole_id"].isin(sel_bh["hole_id"])] if not samples.empty and not sel_bh.empty else samples.iloc[0:0]
 sel_up = data.uploads_in(uploads, area)
+sel_vs = data.points_in(vs_sites, area) if show_vs else vs_sites.iloc[0:0]
+if area is None or vs_prof.empty:
+    sel_prof = vs_prof
+else:
+    located = vs_prof.dropna(subset=["x_mtm8", "y_mtm8"])
+    sel_prof = data.points_in(located, area)
 area_label = "whole island" if area is None else (
     f"{radius} m around {state['click']['lat']:.5f}, {state['click']['lng']:.5f}" if mode == "Point and radius"
     else "drawn area (" + f"{area.area / 1e6:.2f} km²)")
 
-c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Boreholes", f"{len(sel_bh):,}")
 c2.metric("SPT samples", f"{len(sel_s):,}")
 c3.metric("Pre-1960 boreholes", f"{int((sel_bh['data_era'] == 'pre-1960').sum()) if not sel_bh.empty else 0:,}")
-c4.metric("Contributed files", f"{len(sel_up):,}")
+c4.metric("Measured Vs30 sites", f"{len(sel_vs):,}")
+c5.metric("Contributed files", f"{len(sel_up):,}")
 
-t1, t2, t3, t4 = st.tabs(["Boreholes", "SPT samples", "Files", "Download"])
+t1, t2, tv, t3, t4 = st.tabs(["Boreholes", "SPT samples", "Measured Vs", "Files", "Download"])
 with t1:
     if sel_bh.empty:
         st.write("No boreholes in this selection.")
@@ -134,6 +157,22 @@ with t2:
         if "refusal" in sel_s.columns:
             st.write(f"{int(sel_s['refusal'].sum()):,} of {len(sel_s):,} samples are refusals.")
         st.dataframe(sel_s, width="stretch", hide_index=True)
+with tv:
+    if sel_vs.empty and sel_prof.empty:
+        st.write("No measured Vs in this selection.")
+    st.caption("Source: Rosset et al. compilation. Vs30 at these sites is MEASURED by field seismic surveys; "
+               "the archive's borehole Vs30 is estimated. Profiles are measured (downhole) or derived "
+               "(MASW inversion, minivib travel times): see `vs_status`.")
+    if not sel_vs.empty:
+        st.subheader("Vs30 sites")
+        st.dataframe(sel_vs.drop(columns=["method", "source"], errors="ignore"), width="stretch", hide_index=True)
+    if not sel_prof.empty:
+        st.subheader("Vs-depth profiles")
+        n_unloc = int(sel_prof["lat"].isna().sum())
+        st.write(f"{len(sel_prof):,} depth rows from {sel_prof['site_id'].nunique()} sites or lines"
+                 + (f" ({n_unloc:,} rows have no location in the source and appear only in the whole-island selection)."
+                    if n_unloc else "."))
+        st.dataframe(sel_prof, width="stretch", hide_index=True)
 with t3:
     if not sel_up:
         st.write("No contributed files in this selection yet. Add one on the Upload page.")
@@ -146,12 +185,12 @@ with t3:
                 st.warning("Pre-1960 work: SPT N read about half of modern values.")
             st.download_button("Download this file", store.get_bytes(r), file_name=r["file_name"], key=f"dl_{r['id']}")
 with t4:
-    st.write(f"One zip for **{area_label}**: boreholes and SPT samples as CSV (MTM 8, with a WGS84 copy), "
-             "contributed files, a manifest of their metadata, and a README with the caveats.")
-    zip_key = (area_label, label, len(sel_bh), len(sel_up))
+    st.write(f"One zip for **{area_label}**: boreholes, SPT samples, measured Vs30 sites and Vs profiles as CSV "
+             "(MTM 8, with a WGS84 copy), contributed files, a manifest of their metadata, and a README with the caveats.")
+    zip_key = (area_label, label, len(sel_bh), len(sel_up), len(sel_vs), len(sel_prof), show_far)
     if st.button("Prepare zip"):
         with st.spinner("Building zip…"):
-            state["zip"] = (zip_key, bundle.build_zip(sel_bh, sel_s, sel_up, store.get_bytes, area_label, label))
+            state["zip"] = (zip_key, bundle.build_zip(sel_bh, sel_s, sel_up, store.get_bytes, area_label, label, sel_vs, sel_prof))
     if state.get("zip") and state["zip"][0] == zip_key:
         st.download_button("Download zip", state["zip"][1], file_name="montreal_geotech_selection.zip",
                            mime="application/zip")

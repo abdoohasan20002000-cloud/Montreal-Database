@@ -28,7 +28,7 @@ def era_label(year):
 def load_archive(use_demo=False):
     """Return (boreholes, samples, label). Either frame may be empty if no file is present."""
     bh_path, s_path, label = config.BOREHOLES_CSV, config.SAMPLES_CSV, "archive"
-    if use_demo or not bh_path.exists():
+    if use_demo:
         bh_path, s_path, label = config.DEMO_BOREHOLES_CSV, config.DEMO_SAMPLES_CSV, "DEMO (synthetic, not real data)"
     if not bh_path.exists():
         return pd.DataFrame(), pd.DataFrame(), "none"
@@ -61,6 +61,15 @@ def _as_bool(v):
     if pd.isna(v):
         return False  # blank refusal means "not a refusal", never True
     return str(v).strip().lower() in {"1", "true", "yes", "y", "oui", "r", "refusal"}
+
+
+def load_vs():
+    """Measured-Vs tables (sites and profiles). Empty frames if the files are absent."""
+    sites = pd.read_csv(config.VS30_SITES_CSV) if config.VS30_SITES_CSV.exists() else pd.DataFrame()
+    prof = pd.read_csv(config.VS_PROFILES_CSV, low_memory=False) if config.VS_PROFILES_CSV.exists() else pd.DataFrame()
+    if not prof.empty:
+        prof = prof[~prof["duplicate_of_earlier_sheet"].fillna(False).astype(bool)]  # drop rows repeated between sheets
+    return sites, prof
 
 
 # ---- selection -------------------------------------------------------------

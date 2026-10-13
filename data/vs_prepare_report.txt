@@ -1,0 +1,6 @@
+vs30_sites.csv: 159 sites; 94 inside the rough island box, 65 outside it (LM line, Rougemont area); 10 without a Vs30 value; 0 outside 100-3000 m/s.
+vs_profiles.csv: 2805 rows (2273 after dropping rows repeated between sheets), 70 sites/lines, methods {'MASW': 1595, 'Minivib': 1048, 'Downhole': 158, 'not stated': 4}.
+  located: 2287 rows; unlocated: 518 rows from sites ['MM05', 'MM05-1', 'MM11', 'MM11-2', 'MM12', 'MM12-2', 'MM13', 'MM13-7', 'MM14', 'MM14-1', 'MM15', 'MM15-6', 'MM16', 'MM16-1', 'MM16-2', 'MM16-3', 'MM16-7', 'MM18', 'MM18-10', 'MM19', 'MM19-2', 'MM20', 'MM20-3', 'MP11', 'PASSIVE']
+  method blank in source: 4 rows (site MM09-2); labelled 'not stated', not guessed.
+  Vs outside 50-3500 m/s: 0; bad depth: 2 (LM04-1, depth -0.04 m, kept and flagged).
+Not used: UTM27 coordinates on sheet 06_SITE_METADATA (source notes LM04-1 easting 275,585 is impossible for UTM 18; only 9 sites have them). Location comes from the WGS84 coordinates on sheet 06b instead.

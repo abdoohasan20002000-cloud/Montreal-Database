@@ -6,6 +6,8 @@ A Streamlit app for the Island of Montréal borehole archive (6,961 boreholes, 3
 - **Map**: boreholes coloured by era or (estimated) site class, contributed files as pins.
   Pick the whole island, a point and radius, or draw an area; see counts and tables; download one zip
   (boreholes and SPT samples as CSV in MTM 8 with a WGS84 copy, the contributed files, a manifest, a README).
+- **Measured Vs**: 159 measured-Vs30 sites (blue rings) and Vs profiles from the Rosset workbook, kept apart from the
+  archive's estimated Vs30. Rebuild with `python scripts/prepare_rosset_vs.py`; the checks are in `data/vs_prepare_report.txt`.
 - **Upload**: any file type, placed on the map by click, drawing, coordinates (MTM 8 or lat/long) or an
   existing hole ID, with a metadata card (source, year of work, measured/derived/estimated, licence).
   Checks run at once: duplicate file, on the island, file opens, and for tables hole IDs, coordinates,

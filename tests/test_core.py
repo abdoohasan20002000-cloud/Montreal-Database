@@ -59,3 +59,21 @@ def test_zip_bundle_contents():
     z = zipfile.ZipFile(io.BytesIO(bundle.build_zip(bh, s, up, lambda r: b"%PDF", "whole island", "archive")))
     assert set(z.namelist()) == {"README.txt", "boreholes.csv", "spt_samples.csv", "manifest.csv", "files/u1_log.pdf"}
     assert "ESTIMATED" in z.read("README.txt").decode()
+
+
+def test_measured_vs_tables_follow_project_rules():
+    sites, prof = data.load_vs()
+    assert len(sites) == 159 and sites["site_id"].is_unique
+    assert sites["vs30_status"].str.startswith(("measured", "no value")).all()
+    assert sites["vs30_ms"].dropna().between(100, 3000).all()
+    assert {"method", "source", "processed_on"} <= set(sites.columns)
+    assert prof["vs_status"].notna().all() and not prof["duplicate_of_earlier_sheet"].astype(bool).any()
+    assert set(prof["vs_status"]) == {"measured (downhole seismic)",
+                                      "derived (inversion of surface-wave dispersion)",
+                                      "derived (interval velocity from two-way travel times)",
+                                      "method not stated in the source (do not call measured)"}
+
+
+def test_no_archive_means_empty_not_demo():
+    bh, _, label = data.load_archive(False)
+    assert bh.empty and label == "none"

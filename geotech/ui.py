@@ -6,6 +6,7 @@ from . import data, storage
 ERA_COLOURS = {"pre-1960": "#d95f02", "1960 and later": "#1b9e77", "undated": "#7f7f7f"}
 SITE_CLASS_COLOURS = {"A": "#08306b", "B": "#2171b5", "C": "#6baed6", "D": "#fdae6b", "E": "#e6550d", "F": "#a50f15"}
 UPLOAD_COLOUR = "#7b3294"
+VS_COLOUR = "#08519c"
 
 
 def secrets():
@@ -23,6 +24,11 @@ def get_store():
 @st.cache_data(show_spinner="Loading the borehole archive…")
 def load_archive(use_demo):
     return data.load_archive(use_demo)
+
+
+@st.cache_data
+def load_vs():
+    return data.load_vs()
 
 
 def archive_banner(label):

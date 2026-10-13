@@ -7,6 +7,8 @@ DATA_DIR = ROOT / "data"
 # Archive files kept in the repo (small enough for git: about 7k holes, 39k samples).
 BOREHOLES_CSV = DATA_DIR / "boreholes.csv"
 SAMPLES_CSV = DATA_DIR / "spt_samples.csv"
+VS30_SITES_CSV = DATA_DIR / "vs30_sites.csv"        # measured Vs30 sites (Rosset compilation)
+VS_PROFILES_CSV = DATA_DIR / "vs_profiles.csv"      # Vs-depth profiles
 ISLAND_OUTLINE = DATA_DIR / "island_outline.geojson"  # optional, enables the precise island check
 DEMO_BOREHOLES_CSV = DATA_DIR / "demo" / "boreholes_DEMO.csv"
 DEMO_SAMPLES_CSV = DATA_DIR / "demo" / "spt_samples_DEMO.csv"

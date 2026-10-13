@@ -12,7 +12,7 @@ MANIFEST_FIELDS = ["id", "title", "data_type", "file_name", "file_size", "sha256
                    "footprint_wkt_mtm8", "status", "reviewed_by", "reviewed_at", "notes"]
 
 
-def readme(area_label, data_label, n_bh, n_s, n_files):
+def readme(area_label, data_label, n_bh, n_s, n_files, n_vs=0, n_prof=0):
     return f"""Montréal geotechnical data: download
 Created {now_iso()} for: {area_label}
 Archive source: {data_label}
@@ -22,6 +22,10 @@ Contents
                     lon / lat (WGS84) are a convenience copy for web maps.
   spt_samples.csv   {n_s} SPT samples. n_field is the raw field N, never corrected here.
                     refusal = True marks a refusal: a censored value, not N = 999.
+  vs30_sites.csv    {n_vs} sites with a Vs30 from field seismic surveys (Rosset compilation). MEASURED,
+                    unlike the borehole Vs30 below. Columns method/source/processed_on say how each was made.
+  vs_profiles.csv   {n_prof} Vs-depth rows. vs_status says measured (downhole) or derived (MASW inversion,
+                    minivib travel times). Rows with no location are left out of area selections.
   manifest.csv      one row per contributed file: metadata card, licence, check status.
   files/            the contributed files, unchanged.
 
@@ -34,10 +38,16 @@ Read before use
 """
 
 
-def build_zip(boreholes, samples, uploads, get_bytes, area_label, data_label):
+def build_zip(boreholes, samples, uploads, get_bytes, area_label, data_label, vs_sites=None, vs_prof=None):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("README.txt", readme(area_label, data_label, len(boreholes), len(samples), len(uploads)))
+        n_vs = 0 if vs_sites is None else len(vs_sites)
+        n_prof = 0 if vs_prof is None else len(vs_prof)
+        z.writestr("README.txt", readme(area_label, data_label, len(boreholes), len(samples), len(uploads), n_vs, n_prof))
+        if n_vs:
+            z.writestr("vs30_sites.csv", vs_sites.to_csv(index=False))
+        if n_prof:
+            z.writestr("vs_profiles.csv", vs_prof.to_csv(index=False))
         if len(boreholes):
             z.writestr("boreholes.csv", boreholes.to_csv(index=False))
         if len(samples):
