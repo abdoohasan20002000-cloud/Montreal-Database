@@ -1,8 +1,9 @@
 """What the data is, and how to read it."""
 import streamlit as st
 
-st.set_page_config(page_title="About · Montréal geotechnical data", page_icon="ℹ️")
-st.title("About the data")
+from geotech import ui
+
+ui.hero("About the data", "What is in the atlas, where it comes from, and how to read each value.")
 st.markdown("""
 **Borehole archive.** 6,961 boreholes and 39,285 SPT samples, 1927–2009, compiled from the
 City of Montréal, the Ministère des Transports (MTQ) and the Ministère de l'Environnement (MELCC).

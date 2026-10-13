@@ -4,8 +4,8 @@ import streamlit as st
 from geotech import ui
 from geotech.storage import now_iso
 
-st.set_page_config(page_title="Review · Montréal geotechnical data", page_icon="✅", layout="wide")
-st.title("Curator review")
+ui.hero("Curate", "Read each upload's check report, inspect the file, then approve or reject it. "
+        "Only approved files appear on the map.")
 store = ui.get_store()
 ui.storage_banner(store)
 

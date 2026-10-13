@@ -1,6 +1,23 @@
 [theme]
-primaryColor = "#1f6f8b"
 base = "light"
+primaryColor = "#0e7c86"
+backgroundColor = "#f6f5f1"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#1c2430"
+font = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+headingFont = "Space Grotesk:https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap"
+codeFont = "IBM Plex Mono:https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
+baseRadius = "0.6rem"
+
+[theme.sidebar]
+backgroundColor = "#14202b"
+textColor = "#e8ecef"
+primaryColor = "#4fc3c9"
+secondaryBackgroundColor = "#1d2c39"
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = true
 
 [server]
 maxUploadSize = 200

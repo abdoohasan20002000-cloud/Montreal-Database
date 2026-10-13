@@ -11,22 +11,24 @@ from geotech import config, geo, ui, validate
 from geotech.data import era_label
 from geotech.storage import new_id, now_iso
 
-st.set_page_config(page_title="Upload · Montréal geotechnical data", page_icon="📤", layout="wide")
-st.title("Contribute a file")
-st.caption("Any file type: borehole logs, lab sheets, reports, scans, GIS files, photos. "
-           "The original is stored unchanged. A curator approves it before it appears on the map.")
+ui.hero("Contribute data",
+        "Any file type: borehole logs, lab sheets, reports, scans, GIS files, photos. The original is stored "
+        "unchanged, checked automatically, and appears on the map once a curator approves it.",
+        chips=["1 · Place it on the map", "2 · Describe it", "3 · Automatic checks", "4 · Curator review"])
 store = ui.get_store()
 ui.storage_banner(store)
 state = st.session_state
 
 # ---- 1. location ---------------------------------------------------------------
-st.subheader("1. Where is it?")
+st.subheader(":material/pin_drop: 1. Where is it?")
 how = st.radio("Place it by", ["Clicking or drawing on the map", "Typing coordinates", "An existing hole ID"],
                horizontal=True)
 footprint = None  # shapely geometry, MTM 8
 
 if how == "Clicking or drawing on the map":
-    m = folium.Map(location=[45.55, -73.70], zoom_start=11)
+    m = folium.Map(location=[45.55, -73.70], zoom_start=11, tiles=None)
+    folium.TileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", name="Light",
+                     attr="© OpenStreetMap contributors © CARTO").add_to(m)
     Draw(export=False, draw_options={"polyline": True, "circlemarker": False, "circle": False}).add_to(m)
     if state.get("up_geom"):
         folium.GeoJson(state["up_geom"]).add_to(m)
@@ -66,7 +68,7 @@ if footprint is not None:
     st.caption(f"Location (MTM 8): {footprint.centroid.x:,.1f} E, {footprint.centroid.y:,.1f} N · {footprint.geom_type}")
 
 # ---- 2. file and metadata card ----------------------------------------------------
-st.subheader("2. File and description")
+st.subheader(":material/description: 2. File and description")
 with st.form("upload"):
     f = st.file_uploader("File", accept_multiple_files=False)
     c1, c2 = st.columns(2)
@@ -81,7 +83,7 @@ with st.form("upload"):
     access_level = c2.selectbox("Who may download it", config.ACCESS_LEVELS)
     uploaded_by = c1.text_input("Your name and organisation *")
     notes = c2.text_area("Notes (method, datum, anything a user should know)")
-    submitted = st.form_submit_button("Check and submit")
+    submitted = st.form_submit_button("Check and submit", type="primary", icon=":material/task_alt:")
 
 if submitted:
     missing = [n for n, v in [("file", f), ("title", title), ("year", work_year), ("your name", uploaded_by)] if not v]
