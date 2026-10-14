@@ -24,7 +24,10 @@ for r in pending:
         c1, c2 = st.columns([2, 1])
         with c1:
             st.write(f"**File:** {r['file_name']} ({r['file_size'] / 1e6:.2f} MB)  \n"
-                     f"**Source:** {r['source_org']} · {r.get('original_reference') or 'no reference'} · {r['work_year']} ({r['data_era']})  \n"
+                     f"**Source:** {r['source_org']} · {r.get('original_reference') or 'no reference'} · {r['work_year']}"
+                     f"{'–' + str(r['work_year_end']) if r.get('work_year_end') else ''} ({r['data_era']})  \n"
+                     f"**Region:** {r.get('region') or 'not recorded'}"
+                     f"{' · part of a submission of several files' if r.get('submission_id') else ''}  \n"
                      f"**Values:** {r['value_status']} · **Licence:** {r['licence']} · **Access:** {r['access_level']}  \n"
                      f"**Location (MTM 8):** {r['x_mtm8']:,.1f} E, {r['y_mtm8']:,.1f} N ({r['geom_type']})  \n"
                      f"**Notes:** {r.get('notes') or '—'}")

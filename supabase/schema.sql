@@ -4,6 +4,7 @@
 
 create table if not exists public.uploads (
   id                  text primary key,
+  submission_id       text,                       -- files sent together share one description
   title               text not null,
   data_type           text not null,
   file_name           text not null,
@@ -13,7 +14,8 @@ create table if not exists public.uploads (
   storage_path        text,
   source_org          text,
   original_reference  text,
-  work_year           int,
+  work_year           int,                        -- first year the data was collected
+  work_year_end       int,                        -- last year, when it spans several
   data_era            text,                       -- pre-1960 / 1960 and later / undated
   value_status        text,                       -- measured / derived / interpolated / estimated / mixed / n.a.
   licence             text,
@@ -27,6 +29,7 @@ create table if not exists public.uploads (
   lon                 double precision,           -- WGS84 copy for the web map
   lat                 double precision,
   footprint_wkt_mtm8  text,                       -- full footprint, EPSG:32188
+  region              text,                       -- boroughs / linked cities touched, "; "-separated (derived)
   status              text not null default 'pending',  -- pending / approved / rejected
   check_report        jsonb,
   reviewed_by         text,
@@ -36,3 +39,8 @@ create table if not exists public.uploads (
 
 alter table public.uploads enable row level security;
 -- No policies: only the service-role key (the app) can read or write.
+
+-- Upgrading a table made with an earlier version of this file:
+alter table public.uploads add column if not exists submission_id text;
+alter table public.uploads add column if not exists work_year_end int;
+alter table public.uploads add column if not exists region text;

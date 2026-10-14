@@ -100,3 +100,54 @@ def test_regression_curves_match_published_coefficients():
     sand = c[c["fit"].str.startswith("sand")].set_index("depth_m")["vs_ms"]
     z = sand.index[0]
     assert abs(sand.iloc[0] - (144.808986 + 36.806129 * z ** 0.570622)) < 1e-6
+
+
+def test_regions_are_assigned_from_city_limits():
+    pts = [(-73.5673, 45.5017), (-73.80, 45.47), (-73.0, 45.5)]  # downtown, Pointe-Claire, east of the river
+    xy = [geo.wgs84_to_mtm8(lon, lat) for lon, lat in pts]
+    names = geo.region_of([p[0] for p in xy], [p[1] for p in xy])
+    assert list(names) == ["Ville-Marie", "Pointe-Claire", "Off the island"]
+    assert geo.region_of(float("nan"), float("nan"))[0] == ""
+    assert geo.regions_touching(Point(*xy[0]).buffer(10)) == ["Ville-Marie"]
+    assert len(geo.region_names()) == 34
+    shp = data.selection_from_inputs("Region", click=["Ville-Marie"])
+    assert shp.contains(Point(*xy[0])) and data.selection_from_inputs("Region", click=["Nowhere"]) == "incomplete"
+
+
+def test_catalogue_filters_by_region_and_years():
+    from geotech import catalogue
+    sites = pd.DataFrame({"site_id": ["a", "b"], "vs30_ms": [300, None], "region": ["Ville-Marie", "Off the island"]})
+    prof = pd.DataFrame({"site_id": ["a"], "region": ["Ville-Marie"]})
+    up = [{"id": "u1", "submission_id": "s1", "title": "CPT", "data_type": "CPT / CPTu (cone penetration)",
+           "work_year": 2005, "work_year_end": 2007, "region": "LaSalle", "file_size": 1e6, "access_level": "Public"},
+          {"id": "u2", "submission_id": "s1", "title": "CPT", "data_type": "CPT / CPTu (cone penetration)",
+           "work_year": 2005, "region": "LaSalle; Verdun", "file_size": 1e6}]
+    cat = catalogue.table(catalogue.builtin(sites, prof, pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
+                          + catalogue.contributed(up))
+    cpt = cat[cat["origin"] == "Contributed"].iloc[0]
+    assert (cpt["year_from"], cpt["year_to"], cpt["regions"]) == (2005, 2007, ["LaSalle", "Verdun"])
+    assert cpt["records"].startswith("2 files")
+    pick = lambda **kw: set(cat[catalogue.matches(cat, **kw)]["key"])
+    assert "up_s1" in pick(regions=["Verdun"]) and "vs30_sites" not in pick(regions=["Verdun"])
+    assert "regions" in pick(regions=["Verdun"])  # island-wide entries match every region
+    assert "up_s1" in pick(years=(2001, 2026)) and "up_s1" not in pick(years=(1990, 2000))
+    assert "vs30_sites" in pick(years=(2001, 2026)) and "vs30_sites" not in pick(years=(2001, 2026), include_undated=False)
+    assert pick(text="cone") == {"up_s1"}
+    assert set(cat.loc[cat["key"] == "vs30_sites", "where"]) == {"Ville-Marie + off the island"}
+
+
+def test_zip_lists_but_leaves_out_restricted_files():
+    import io, zipfile
+    from geotech import bundle
+    up = [{"id": "u1", "file_name": "a.pdf", "access_level": "Public"},
+          {"id": "u2", "file_name": "b.pdf", "access_level": "Restricted"}]
+    z = zipfile.ZipFile(io.BytesIO(bundle.build_zip(pd.DataFrame(), pd.DataFrame(), up, lambda r: b"%PDF",
+                                                    "Ville-Marie", "none")))
+    assert "files/u1_a.pdf" in z.namelist() and "files/u2_b.pdf" not in z.namelist()
+    man = pd.read_csv(z.open("manifest.csv"))
+    assert list(man["in_zip"]) == [True, False]
+
+
+def test_on_island_filter_keeps_unlocated_rows():
+    df = pd.DataFrame({"on_island": pd.Series([True, False, None], dtype=object)})
+    assert len(data.keep_on_island(df)) == 2

@@ -3,7 +3,8 @@
 Elevation comes from the public AWS Terrain Tiles (Terrarium encoding, the same source as the 3D view).
 The picture is decoration only; nothing in it is used as data.
 
-    python scripts/make_hero_art.py        # writes static/hero_contours.webp
+    python scripts/make_hero_art.py          # light theme (default): writes static/hero_contours.webp
+    python scripts/make_hero_art.py --dark   # cyan lines for a dark theme
 """
 import io
 import math
@@ -77,28 +78,30 @@ def main():
     ax.axis("off")
     fig.patch.set_alpha(0)
 
-    cyan = "#22d3ee"
+    dark = "--dark" in sys.argv
+    line, glow = ("#22d3ee", "#22d3ee") if dark else ("#0e7490", "#22d3ee")
+    dot, halo = ("#fde68a", "#fbbf24") if dark else ("#b45309", "#f59e0b")
     # faint graticule every 0.05 degrees
     for lon in np.arange(-74.0, -73.40, 0.05):
         x = (tile_xy(lon, 45.5)[0] - fx0) * 256
-        ax.axvline(x, color=to_rgba("#7dd3fc", 0.05), lw=0.6)
+        ax.axvline(x, color=to_rgba(line, 0.05), lw=0.6)
     for lat in np.arange(45.40, 45.75, 0.05):
         y = (tile_xy(-73.7, lat)[1] - fy0) * 256
-        ax.axhline(y, color=to_rgba("#7dd3fc", 0.05), lw=0.6)
+        ax.axhline(y, color=to_rgba(line, 0.05), lw=0.6)
 
     levels = np.arange(30, 240, 10)
     for lw, a in ((4.0, 0.07), (2.0, 0.14)):  # glow
-        ax.contour(dem, levels=levels, colors=[to_rgba(cyan, a)], linewidths=lw)
-    alphas = np.interp(levels, [30, 230], [0.45, 1.0])
-    ax.contour(dem, levels=levels, colors=[to_rgba(cyan, a) for a in alphas], linewidths=0.9)
+        ax.contour(dem, levels=levels, colors=[to_rgba(glow, a)], linewidths=lw)
+    alphas = np.interp(levels, [30, 230], [0.45, 1.0] if dark else [0.55, 1.0])
+    ax.contour(dem, levels=levels, colors=[to_rgba(line, a) for a in alphas], linewidths=0.9 if dark else 1.2)
 
     sites = pd.read_csv(config.VS30_SITES_CSV)
     sites = sites.dropna(subset=["lon", "lat"])
     pts = np.array([tile_xy(lo, la) for lo, la in zip(sites["lon"], sites["lat"])])
     px, py = (pts[:, 0] - fx0) * 256, (pts[:, 1] - fy0) * 256
-    ax.scatter(px, py, s=260, color=to_rgba("#f59e0b", 0.08), linewidths=0)
-    ax.scatter(px, py, s=60, color=to_rgba("#fbbf24", 0.30), linewidths=0)
-    ax.scatter(px, py, s=10, color=to_rgba("#fde68a", 1.0), linewidths=0)
+    ax.scatter(px, py, s=260, color=to_rgba(halo, 0.10), linewidths=0)
+    ax.scatter(px, py, s=60, color=to_rgba(halo, 0.30), linewidths=0)
+    ax.scatter(px, py, s=10, color=to_rgba(dot, 1.0), linewidths=0)
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", transparent=True)

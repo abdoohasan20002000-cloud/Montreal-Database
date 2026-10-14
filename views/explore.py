@@ -13,10 +13,13 @@ from geotech import bundle, config, data, geo, terrain, ui
 from geotech.config import PRE_MODERN_YEAR
 
 state = st.session_state
+if "goto_regions" in state:  # sent here from the catalogue's "Show on the map"
+    picked = [r for r in state.pop("goto_regions") if r in geo.region_names()]
+    state["mode"], state["region_pick"] = ("Region", picked) if picked else ("Whole island", [])
 
 ui.hero("Map and 3D",
-        "Pick a spot, draw an area or take the whole island to see the boreholes, SPT samples, measured shear-wave "
-        "velocities and contributed files there, then download them in one zip.",
+        "Pick a borough or city, a spot, a drawn area or the whole island to see the boreholes, SPT samples, measured "
+        "shear-wave velocities and contributed data there, then download them in one zip.",
         chips=["Coordinates <b>MTM 8</b> · EPSG:32188", "Vs30 <b>measured</b> and <b>estimated</b> kept apart",
                "Raw <b>N<sub>field</sub></b> kept · pre-1960 flagged"])
 
@@ -27,7 +30,8 @@ with st.sidebar:
                           default=["pre-1960", "1960 and later", "undated"],
                           help=f"Before {PRE_MODERN_YEAR}, SPT N read about half of modern values.")
     show_far = st.toggle("Include Vs sites off the island", value=False,
-                         help="Rougemont area and two LM-line sites lie outside the island.")
+                         help="The LM, PL and VM seismic lines (Laval and the South Shore) and the Rougemont area "
+                              "lie outside the agglomeration.")
     demo = st.toggle("Demo boreholes", value=False, help="400 synthetic points for trying the app. Not real data.")
 
 bh, samples, label = ui.load_archive(demo)
@@ -44,43 +48,54 @@ if not bh.empty:
             pick_src = st.multiselect("Borehole source", sources, default=sources)
         bh = bh[bh["source"].astype(str).isin(pick_src)]
 if not vs_sites.empty and not show_far:
-    vs_sites = vs_sites[vs_sites["on_island"]]
-    vs_prof = vs_prof[vs_prof["on_island"].astype(str).isin(["True", "nan", "None"])]
+    vs_sites, vs_prof = data.keep_on_island(vs_sites), data.keep_on_island(vs_prof)
 if not vs_sites.empty:
     vs_sites = vs_sites.assign(site_class_from_measured=vs_sites["vs30_ms"].map(ui.nbcc_class).fillna("–"))
 
 # ---- controls -------------------------------------------------------------------
 with st.container(border=True):
-    c0, c1, c2, c3 = st.columns([0.9, 1.6, 1.3, 1.2], vertical_alignment="bottom")
+    c0, c1, c2, c3 = st.columns([1.0, 1.85, 1.35, 0.95], vertical_alignment="bottom")
     view = c0.segmented_control("View", ["2D map", "3D relief"], default="2D map", key="view") or "2D map"
     is_3d = view == "3D relief"
-    mode = c1.segmented_control("Area", ["Whole island", "Circle", "Draw"],
+    mode = c1.segmented_control("Area", ["Whole island", "Region", "Circle", "Draw"],
                                 default="Whole island", key="mode", disabled=is_3d) or "Whole island"
-    radius = c2.slider("Radius (m)", 100, 5000, 500, 100, disabled=mode != "Circle" or is_3d)
+    radius = 500
+    picked = []
+    if mode == "Region":
+        picked = c2.multiselect("Boroughs and cities", geo.region_names(), key="region_pick", disabled=is_3d,
+                                placeholder="Pick one or more")
+    else:
+        radius = c2.slider("Radius (m)", 100, 5000, 500, 100, disabled=mode != "Circle" or is_3d)
     colour_by = c3.selectbox("Colour boreholes by", ["Era", "Site class (estimated)"])
     e1, e2, e3 = st.columns([1.9, 1.2, 1.3], vertical_alignment="bottom")
     layers = e1.pills("Layers", ["Boreholes", "Measured Vs30", "Files"], selection_mode="multi",
                       default=["Boreholes", "Measured Vs30", "Files"], key="layers")
     hint = {"Circle": "Click the map to place the centre of the circle.",
+            "Region": "Pick boroughs or linked cities above. Their limits are dashed on the map; hover one for its name.",
             "Draw": "Use the rectangle or polygon tool at the top left of the map.",
             "Whole island": "Everything on the island is selected."}[mode]
     if is_3d:
         hint = ("3D view: drag to pan, right-drag (or Ctrl-drag) to tilt and rotate, scroll to zoom. "
                 "Switch to 2D map to change the selection.")
-        surface = e2.selectbox("Surface", ["Dark map", "Satellite", "Relief only"], key="surface")
+        surface = e2.selectbox("Surface", ["Light map", "Satellite", "Relief only"], key="surface")
         exaggeration = e3.slider("Vertical exaggeration", 1, 15, 6,
                                  help="Montréal is fairly flat (Mont Royal is about 230 m), so relief is stretched "
                                       "to be visible. Symbol heights are not to scale.")
     st.markdown(f'<div class="gx-note">{hint}</div>', unsafe_allow_html=True)
 
 area = data.selection_from_inputs({"Circle": "Point and radius", "Draw": "Draw an area"}.get(mode, mode),
-                                  state.get("drawing"), state.get("click"), radius)
+                                  state.get("drawing"), picked if mode == "Region" else state.get("click"), radius)
 
 # ---- map ------------------------------------------------------------------------
 def build_map():
     m = ui.base_map((45.55, -73.68), 11)
-    b = config.ISLAND_BBOX
-    m.fit_bounds([[b["lat_min"], b["lon_min"]], [b["lat_max"], b["lon_max"]]])
+    if mode == "Region" and area not in (None, "incomplete"):
+        x0, y0, x1, y1 = geo.shp_transform_to_wgs84(area).bounds
+        m.fit_bounds([[y0, x0], [y1, x1]])
+    else:
+        b = config.ISLAND_BBOX
+        m.fit_bounds([[b["lat_min"], b["lon_min"]], [b["lat_max"], b["lon_max"]]])
+    ui.add_regions(m, picked if mode == "Region" else (), interactive=mode in ("Region", "Whole island"))
 
     if "Boreholes" in (layers or []) and not bh.empty:
         def colour(row):
@@ -144,17 +159,19 @@ def legend_html():
         f'{"border:2px solid #fff;box-shadow:0 0 0 1px " + c + ";" if kind == "ring" else ""}'
         f'{"border-radius:50% 50% 50% 0;transform:rotate(-45deg);" if kind == "pin" else ""}"></span>{t}</div>'
         for c, t, kind in rows)
-    return ('<div style="position:absolute;top:88px;left:10px;z-index:9999;background:rgba(10,21,32,0.92);'
-            'padding:10px 13px;border-radius:12px;font:12px/1.4 Inter,system-ui,sans-serif;color:#e6edf3;'
-            'border:1px solid #1c3a4d;box-shadow:0 8px 24px rgba(0,0,0,0.45)">'
-            '<div style="font:500 10px/1.2 \'JetBrains Mono\',monospace;letter-spacing:.2em;color:#7d8fa0;'
+    return ('<div style="position:absolute;bottom:44px;left:10px;z-index:800;background:rgba(255,255,255,0.95);'
+            f'padding:10px 13px;border-radius:12px;font:12px/1.4 Inter,system-ui,sans-serif;color:{ui.INK};'
+            'border:1px solid #dbe4ec;box-shadow:0 8px 24px rgba(15,27,45,0.12)">'
+            f'<div style="font:500 10px/1.2 \'JetBrains Mono\',monospace;letter-spacing:.2em;color:{ui.MUTED};'
             'text-transform:uppercase;margin-bottom:6px">Legend</div>'
-            + items + '<div style="margin-top:6px;color:#a9b8c6">Vs30 site fill = NBCC class</div>'
-            f'<div style="display:flex;gap:3px;margin-top:3px">{classes}</div></div>')
+            + items + f'<div style="margin-top:6px;color:{ui.INK_2}">Vs30 site fill = NBCC class</div>'
+            f'<div style="display:flex;gap:3px;margin-top:3px">{classes}</div>'
+            '<div style="display:flex;align-items:center;gap:7px;margin-top:7px"><span style="width:16px;height:0;'
+            'border-top:1.5px dashed #5b7083"></span>Borough or city limit</div></div>')
 
 
 SURFACES = {
-    "Dark map": "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    "Light map": "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
     "Satellite": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     "Relief only": None,
 }
@@ -172,7 +189,7 @@ def build_3d():
         "TerrainLayer",
         elevation_decoder={"rScaler": 256 * ex, "gScaler": ex, "bScaler": ex / 256, "offset": -32768 * ex},
         elevation_data=terrain.TERRARIUM_URL,
-        texture=SURFACES[surface], color=[64, 98, 124], max_zoom=14, strategy="no-overlap",
+        texture=SURFACES[surface], color=[176, 196, 212], max_zoom=14, strategy="no-overlap",
     )]
 
     def ground(df):
@@ -204,10 +221,14 @@ def build_3d():
                                 disk_resolution=4, extruded=True, get_fill_color=rgb(ui.UPLOAD_COLOUR),
                                 pickable=True))
     if area not in (None, "incomplete"):
-        ring = np.asarray(geo.shp_transform_to_wgs84(area).exterior.coords)
-        zr = np.nan_to_num(terrain.elevation(ring[:, 0], ring[:, 1]), nan=0.0) * ex + 25
-        layers.append(pdk.Layer("PathLayer", [{"path": [[x, y, z] for (x, y), z in zip(ring, zr)]}],
-                                get_path="path", get_color=rgb(ui.ACCENT, 255), get_width=5, width_units="pixels"))
+        shp = geo.shp_transform_to_wgs84(area)
+        paths = []
+        for poly in getattr(shp, "geoms", [shp]):  # a region pick can be several polygons
+            ring = np.asarray(poly.exterior.coords)
+            zr = np.nan_to_num(terrain.elevation(ring[:, 0], ring[:, 1]), nan=0.0) * ex + 25
+            paths.append({"path": [[x, y, z] for (x, y), z in zip(ring, zr)]})
+        layers.append(pdk.Layer("PathLayer", paths, get_path="path", get_color=rgb(ui.ACCENT_DARK, 255), get_width=4,
+                                width_units="pixels"))
     view_state = pdk.ViewState(latitude=45.525, longitude=-73.64, zoom=10.8, pitch=60, bearing=-25)
     return pdk.Deck(layers=layers, initial_view_state=view_state, map_style=None,
                     tooltip={"html": "{tip}", "style": {"fontSize": "12px"}})
@@ -249,6 +270,7 @@ sel_vs = data.points_in(vs_sites, area)
 sel_prof = vs_prof if (area is None or vs_prof.empty) else data.points_in(vs_prof.dropna(subset=["x_mtm8", "y_mtm8"]), area)
 area_label = "whole island" if area is None else (
     f"{radius} m around {state['click']['lat']:.5f}, {state['click']['lng']:.5f}" if mode == "Circle"
+    else (picked[0] if len(picked) == 1 else f"{len(picked)} regions") if mode == "Region"
     else f"drawn area ({area.area / 1e6:.2f} km²)")
 
 with right:
@@ -259,8 +281,10 @@ with right:
     ui.kpis([
         (f"{len(sel_bh):,}", "Boreholes", f"{n_pre:,} pre-1960", ui.ERA_COLOURS["1960 and later"]),
         (f"{len(sel_s):,}", "SPT samples", f"{n_ref:,} refusals (censored)", ui.ERA_COLOURS["pre-1960"]),
-        (f"{len(sel_vs):,}", "Measured Vs30 sites",
-         f"median {vs_med:.0f} m/s" if vs_med == vs_med and vs_med is not None else "no values", ui.VS_COLOUR),
+        (f"{int(sel_vs['vs30_ms'].notna().sum()) if not sel_vs.empty else 0:,}", "Sites with measured Vs30",
+         (f"median {vs_med:.0f} m/s" if vs_med == vs_med and vs_med is not None else "no values")
+         + (f"; {int(sel_vs['vs30_ms'].isna().sum())} more without a value" if not sel_vs.empty
+            and sel_vs["vs30_ms"].isna().any() else ""), ui.VS_COLOUR),
         (f"{len(sel_up):,}", "Contributed files", "approved by a curator", ui.UPLOAD_COLOUR),
     ])
 
@@ -314,11 +338,11 @@ with tv:
     else:
         a, b = st.columns([1.25, 1], gap="large")
         with a:
-            st.dataframe(sel_vs[["site_id", "area", "survey_type", "vs30_ms", "site_class_from_measured", "f0_hz",
+            st.dataframe(sel_vs[["site_id", "area", "region", "survey_type", "vs30_ms", "site_class_from_measured", "f0_hz",
                                  "x_mtm8", "y_mtm8", "qa_flags"]],
                          hide_index=True, width="stretch", height=380,
                          column_config={"vs30_ms": st.column_config.NumberColumn("Vs30 (m/s)", format="%.0f"),
-                                        "site_class_from_measured": "Class",
+                                        "site_class_from_measured": "Class", "region": "Region (derived)",
                                         "f0_hz": st.column_config.NumberColumn("f0 (Hz)", format="%.2f"),
                                         "x_mtm8": st.column_config.NumberColumn("X MTM8", format="%.0f"),
                                         "y_mtm8": st.column_config.NumberColumn("Y MTM8", format="%.0f")})
@@ -359,10 +383,17 @@ with tf:
     if not sel_up:
         st.write("No contributed files here yet. Add one under Contribute data.")
     for r in sel_up:
-        with st.expander(f"{r['data_type']} · {r['title']} ({r.get('work_year') or 'undated'})", icon=":material/description:"):
+        y0, y1 = data.upload_years(r)
+        when = "undated" if y0 is None else str(y0) if y0 == y1 else f"{y0}–{y1}"
+        with st.expander(f"{r['data_type']} · {r['title']} ({when})", icon=":material/description:"):
             st.write(f"**Source:** {r.get('source_org')} · {r.get('original_reference') or ''}  \n"
-                     f"**Values:** {r.get('value_status')} · **Licence:** {r.get('licence')}  \n"
-                     f"**File:** {r['file_name']} ({r.get('file_size', 0) / 1e6:.2f} MB) · uploaded {r.get('uploaded_at')}")
+                     f"**Where:** {', '.join(data.upload_regions(r)) or 'not located'}  \n"
+                     f"**Values:** {r.get('value_status')} · **Licence:** {r.get('licence')} · "
+                     f"**Access:** {r.get('access_level') or 'Public'}  \n"
+                     f"**File:** {r['file_name']} ({(r.get('file_size') or 0) / 1e6:.2f} MB) · uploaded {r.get('uploaded_at')}")
             if r.get("data_era") == "pre-1960":
                 st.warning("Pre-1960 work: SPT N read about half of modern values.")
-            st.download_button("Download this file", store.get_bytes(r), file_name=r["file_name"], key=f"dl_{r['id']}")
+            if ui.can_download(r):
+                st.download_button("Download this file", store.get_bytes(r), file_name=r["file_name"], key=f"dl_{r['id']}")
+            else:
+                st.caption("Listed only: its access level is not Public. Ask a curator for a copy.")

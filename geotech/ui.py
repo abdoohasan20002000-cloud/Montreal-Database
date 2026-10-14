@@ -1,194 +1,205 @@
-"""Helpers shared by the Streamlit pages: colours, page style, headers, cards and cached data."""
+"""Helpers shared by the Streamlit pages: colours, page style, headers, cards, maps and cached data."""
 import html
 
 import folium
 import streamlit as st
 
-from . import config, data, storage
+from . import config, data, geo, storage
 from .insight import nbcc_class  # noqa: F401  (re-exported for the pages)
 
 # ---- colours ---------------------------------------------------------------------------
-# Data colours are checked against the dark page (#0a1520) with the dataviz palette validator:
-# the first three categorical slots pass all-pairs (colour-blind separation and contrast).
-CATEGORICAL = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
+# Data colours are checked on white with the dataviz palette validator: the first three categorical slots pass
+# all-pairs colour-blind separation; aqua is below 3:1 contrast, so it is always drawn with a white ring and a legend.
+CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 ERA_COLOURS = {"1960 and later": CATEGORICAL[0], "pre-1960": CATEGORICAL[1], "undated": "#898781"}
 UPLOAD_COLOUR = CATEGORICAL[2]
-# NBCC site class is ordered, so it is one violet hue stepped dark (A, hard rock) to light (E, soft soil):
-# the softest ground, where shaking is amplified most, stands out most on the dark map.
-SITE_CLASS_COLOURS = {"A": "#61489b", "B": "#7f61c5", "C": "#9c82e2", "D": "#b9a6f3", "E": "#d7ccfe", "F": "#898781"}
+# NBCC site class is ordered, so it is one violet hue stepped light (A, hard rock) to dark (E, soft soil):
+# the softest ground, where shaking is amplified most, stands out most.
+SITE_CLASS_COLOURS = {"A": "#af9ee4", "B": "#9379d7", "C": "#7756c0", "D": "#5b3a9b", "E": "#3e256e", "F": "#898781"}
 VS_COLOUR = SITE_CLASS_COLOURS["C"]
-SEQUENTIAL = ["#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb"]  # low (dark) to high (light)
-INK, INK_2, MUTED, ACCENT = "#e6edf3", "#a9b8c6", "#7d8fa0", "#22d3ee"
-SURFACE = "#0a1520"
+SEQUENTIAL = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"]  # low (light) to high (dark)
+# Coverage chart (what kind of data sits in each region): an all-pairs pass on white; the aqua/magenta pair is in the
+# colour-blind floor band, so the chart always carries a legend, tooltips and white gaps between segments.
+COVERAGE_COLOURS = {"Boreholes": CATEGORICAL[0], "Measured Vs30 sites": CATEGORICAL[4],
+                    "Vs profile locations": CATEGORICAL[3], "Contributed files": CATEGORICAL[2]}
+INK, INK_2, MUTED, ACCENT, ACCENT_DARK = "#0f1b2d", "#475569", "#566476", "#0891b2", "#0e7490"
+SURFACE = "#ffffff"
 
 ART_URL = "app/static/hero_contours.webp"  # made by scripts/make_hero_art.py
 
 _CSS = """
 <style>
-:root { --bg:#0a1520; --card:#0f1d2b; --line:#1c3a4d; --glow:rgba(34,211,238,0.24); --ink:#e6edf3; --ink2:#a9b8c6;
-  --muted:#7d8fa0; --accent:#22d3ee; --art:url("%(art)s"); }
+:root { --bg:#f5f8fb; --card:#ffffff; --line:#dbe4ec; --soft:#eef6f9; --ink:#0f1b2d; --ink2:#475569; --muted:#566476;
+  --accent:#0891b2; --accent-dark:#0e7490; --art:url("%(art)s"); }
 
-/* page: a faint engineering grid and the island's contours on the right */
+/* page: a faint survey grid and a soft cyan glow */
 [data-testid="stApp"] { background:
-    radial-gradient(1100px 520px at 80%% -8%%, rgba(34,211,238,0.08), transparent 62%%),
-    linear-gradient(rgba(125,211,252,0.03) 1px, transparent 1px) 0 0 / 46px 46px,
-    linear-gradient(90deg, rgba(125,211,252,0.03) 1px, transparent 1px) 0 0 / 46px 46px,
-    #0a1520; }
-[data-testid="stMain"]::before { content:""; position:fixed; right:-8vw; top:4vh; width:58vw; height:92vh;
-  background: var(--art) center / contain no-repeat; opacity:0.13; pointer-events:none; z-index:0;
-  -webkit-mask-image: radial-gradient(closest-side, #000 50%%, transparent);
-  mask-image: radial-gradient(closest-side, #000 50%%, transparent); }
+    radial-gradient(1000px 480px at 82%% -10%%, rgba(8,145,178,0.08), transparent 62%%),
+    linear-gradient(rgba(14,116,144,0.035) 1px, transparent 1px) 0 0 / 46px 46px,
+    linear-gradient(90deg, rgba(14,116,144,0.035) 1px, transparent 1px) 0 0 / 46px 46px,
+    #f5f8fb; }
 .block-container { position:relative; z-index:1; padding-top:1.4rem; padding-bottom:3rem; max-width:1480px; }
 [data-testid="stHeader"] { background: transparent; }
 [data-testid="stDecoration"] { display:none; }
-h1, h2, h3, h4 { letter-spacing:-0.01em; }
+h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
 
 /* sidebar: navigation as outlined buttons under small spaced-out section labels */
-[data-testid="stSidebar"] { background: linear-gradient(180deg, #0d1a26 0%%, #0b1621 100%%); }
-[data-testid="stSidebarNav"] { padding: 0 6px; }
+[data-testid="stSidebar"] { background:#ffffff; }
+[data-testid="stSidebarNav"] { padding:0 6px; }
 [data-testid="stNavSectionHeader"] { pointer-events:none; margin:14px 0 8px; padding:0 2px; min-height:0; }
 [data-testid="stNavSectionHeader"] p { font-family:"JetBrains Mono", ui-monospace, monospace; font-size:0.68rem;
   letter-spacing:0.26em; text-transform:uppercase; color:var(--muted); font-weight:500; }
 [data-testid="stNavSectionHeader"] > div:last-child { display:none; }
-[data-testid="stSidebarNavLink"] { border:1px solid rgba(34,211,238,0.30); background:rgba(17,33,48,0.7);
-  border-radius:12px; min-height:46px; padding:0.55rem 0.9rem; margin:0 0 10px; justify-content:center;
+[data-testid="stSidebarNavLink"] { border:1px solid #cfe1e8; background:#f8fbfc; border-radius:12px; min-height:46px;
+  padding:0.55rem 0.9rem; margin:0 0 10px; justify-content:center;
   transition: border-color .15s, background .15s, box-shadow .15s; }
-[data-testid="stSidebarNavLink"]:hover { border-color:var(--accent); background:rgba(34,211,238,0.08); }
+[data-testid="stSidebarNavLink"]:hover { border-color:var(--accent); background:#ecf8fb; }
 [data-testid="stSidebarNavLink"] p { font-size:0.97rem; font-weight:500; color:var(--ink); }
-[data-testid="stSidebarNavLink"] [data-testid="stIconMaterial"] { color:#67e8f9 !important; }
-[data-testid="stSidebarNavLink"][aria-current="page"] { background:var(--accent); border-color:var(--accent);
-  box-shadow:0 0 26px rgba(34,211,238,0.28); }
+[data-testid="stSidebarNavLink"] [data-testid="stIconMaterial"] { color:var(--accent-dark) !important; }
+[data-testid="stSidebarNavLink"][aria-current="page"] { background:linear-gradient(135deg, #0e7490, #0891b2);
+  border-color:#0e7490; box-shadow:0 8px 22px rgba(8,145,178,0.28); }
 [data-testid="stSidebarNavLink"][aria-current="page"] p,
-[data-testid="stSidebarNavLink"][aria-current="page"] [data-testid="stIconMaterial"] { color:#04161d !important; font-weight:600; }
+[data-testid="stSidebarNavLink"][aria-current="page"] [data-testid="stIconMaterial"] { color:#ffffff !important; font-weight:600; }
 [data-testid="stSidebarNavSeparator"] { display:none; }
 [data-testid="stSidebarUserContent"] [data-testid="stElementContainer"]:has(.gx-credit) { order:99; }
 .gx-side-label { font-family:"JetBrains Mono", ui-monospace, monospace; font-size:0.68rem; letter-spacing:0.26em;
   text-transform:uppercase; color:var(--muted); margin:6px 0 2px; }
 .gx-credit { border-top:1px solid var(--line); margin-top:22px; padding-top:16px; }
-.gx-credit .n { font-family:"Space Grotesk", sans-serif; font-weight:700; color:#fff; font-size:1rem; }
+.gx-credit .n { font-family:"Space Grotesk", sans-serif; font-weight:700; color:var(--ink); font-size:1rem; }
 .gx-credit .r { color:var(--muted); font-size:0.8rem; line-height:1.5; margin-top:3px; }
 
 /* header card */
-.gx-hero { position:relative; overflow:hidden; border:1px solid var(--glow); border-radius:22px;
-  padding:26px 36px 24px; margin:2px 0 22px;
-  background: radial-gradient(700px 320px at 92%% 20%%, rgba(34,211,238,0.10), transparent 70%%),
-    linear-gradient(180deg, #0d1b28, #0a1621);
-  box-shadow: 0 24px 60px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04); }
+.gx-hero { position:relative; overflow:hidden; border:1px solid #cfe3ea; border-radius:22px; padding:26px 36px 24px;
+  margin:2px 0 22px; background: radial-gradient(700px 320px at 92%% 15%%, rgba(34,211,238,0.14), transparent 70%%),
+    linear-gradient(180deg, #ffffff, #f4fafc);
+  box-shadow: 0 18px 50px rgba(15,27,45,0.08), 0 1px 0 rgba(255,255,255,0.8) inset; }
 .gx-hero::after { content:""; position:absolute; top:-10%%; bottom:-10%%; right:-4%%; width:62%%; z-index:0;
-  background: var(--art) center / cover no-repeat; opacity:0.85; filter: brightness(1.5) saturate(1.15);
+  background: var(--art) center / cover no-repeat; opacity:0.9; pointer-events:none;
   -webkit-mask-image: linear-gradient(90deg, transparent 0%%, rgba(0,0,0,0.35) 30%%, #000 70%%);
-  mask-image: linear-gradient(90deg, transparent 0%%, rgba(0,0,0,0.35) 30%%, #000 70%%); pointer-events:none; }
+  mask-image: linear-gradient(90deg, transparent 0%%, rgba(0,0,0,0.35) 30%%, #000 70%%); }
 .gx-hero > * { position:relative; z-index:1; }
 .gx-hero.lg { padding:54px 48px 40px; min-height:360px; }
 .gx-hero.lg::after { width:68%%; opacity:1; }
 .gx-eyebrow { font-family:"JetBrains Mono", ui-monospace, monospace; font-size:0.72rem; letter-spacing:0.28em;
-  text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
-.gx-hero h1 { font-family:"Space Grotesk", sans-serif; color:#fff; font-weight:700; font-size:2.1rem; line-height:1.1;
+  text-transform:uppercase; color:var(--accent-dark); margin-bottom:10px; font-weight:500; }
+.gx-hero h1 { font-family:"Space Grotesk", sans-serif; color:var(--ink); font-weight:700; font-size:2.1rem; line-height:1.1;
   margin:0 0 10px 0; padding:0; }
 .gx-hero.lg h1 { font-size:3.3rem; margin-bottom:24px; }
-.gx-hero p { color:#b7c4d0; margin:0; font-size:1rem; line-height:1.6; max-width:780px; }
+.gx-hero p { color:#334155; margin:0; font-size:1rem; line-height:1.6; max-width:780px; }
 .gx-hero.lg p { font-size:1.16rem; max-width:720px; }
 .gx-rule { width:150px; height:3px; border-radius:3px; margin:18px 0 14px;
-  background:linear-gradient(90deg, #22d3ee 0%%, #60a5fa 35%%, #f472b6 70%%, #a78bfa 100%%); }
+  background:linear-gradient(90deg, #0891b2 0%%, #3b82f6 35%%, #ec4899 70%%, #8b5cf6 100%%); }
 .gx-hero:not(.lg) .gx-rule { width:110px; margin:14px 0 2px; }
-.gx-byline { color:#93a4b4; font-size:0.92rem; }
-.gx-byline b { font-family:"Space Grotesk", sans-serif; color:#fff; font-size:1rem; }
-.gx-byline .dot { margin:0 10px; color:#4b6276; }
+.gx-byline { color:var(--muted); font-size:0.92rem; }
+.gx-byline b { font-family:"Space Grotesk", sans-serif; color:var(--ink); font-size:1rem; }
+.gx-byline .dot { margin:0 10px; color:#9aa9b8; }
 .gx-chips { margin-top:14px; display:flex; flex-wrap:wrap; gap:8px; }
-.gx-chip { font-size:0.78rem; padding:4px 11px; border-radius:999px; background:rgba(34,211,238,0.07);
-  border:1px solid rgba(34,211,238,0.22); color:#cfe9ef; }
-.gx-chip b { color:#fff; font-weight:600; }
+.gx-chip { font-size:0.78rem; padding:4px 11px; border-radius:999px; background:#ecf8fb; border:1px solid #c5e4ec; color:#155e75; }
+.gx-chip b { color:#0c4a5e; font-weight:600; }
+
+/* segmented controls and pills wrap in narrow columns instead of hiding options off the edge */
+[data-testid="stButtonGroup"] > [role="radiogroup"], [data-testid="stButtonGroup"] > [role="toolbar"] {
+  flex-wrap:wrap; overflow:visible; gap:4px; }
+[data-testid="stButtonGroup"] button[data-variant="segmented_control"] { border-radius:10px; }
 
 /* KPI cards: label, big number, one line of context */
-.gx-kpis { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; margin:2px 0 8px; }
-.gx-kpi { position:relative; overflow:hidden; border:1px solid var(--line); border-radius:14px;
-  padding:13px 16px 12px 18px; background:linear-gradient(180deg, rgba(17,33,48,0.92), rgba(12,25,37,0.92)); }
-.gx-kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--c, var(--accent)); }
+.gx-kpis { display:grid; grid-template-columns:repeat(auto-fit,
+    minmax(min(100%%, max(11rem, calc((100%% - (var(--cols, 2) - 1) * 12px) / var(--cols, 2)))), 1fr)); gap:12px;
+  margin:2px 0 8px; }
+.gx-kpi { position:relative; overflow:hidden; border:1px solid var(--line); border-radius:14px; background:#ffffff;
+  padding:13px 16px 12px 18px; box-shadow:0 4px 14px rgba(15,27,45,0.04); }
+.gx-kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--c, var(--accent)); }
 .gx-kpi .l { font-size:0.8rem; color:var(--ink2); }
-.gx-kpi .v { font-family:"Space Grotesk", sans-serif; font-size:1.8rem; font-weight:600; color:#fff; line-height:1.15;
-  margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gx-kpi .v { font-family:"Space Grotesk", sans-serif; font-size:1.8rem; font-weight:600; color:var(--ink); line-height:1.15;
+  margin-top:4px; overflow-wrap:anywhere; }
 .gx-kpi .s { font-size:0.76rem; color:var(--muted); margin-top:3px; }
 
-/* value chips (site classes, value status) */
+/* value chips (site classes, value status, regions) */
 .gx-tags { display:flex; flex-wrap:wrap; gap:8px; margin:4px 0 8px; }
 .gx-tag { display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; font-weight:600; padding:4px 11px;
   border-radius:999px; }
 
-/* cards on the home page */
-[class*="st-key-gxcard"] { background:linear-gradient(180deg, rgba(17,33,48,0.85), rgba(11,22,33,0.85));
-  border-radius:16px; transition:border-color .15s, transform .15s; }
-[class*="st-key-gxcard"]:hover { border-color:var(--accent) !important; transform:translateY(-2px); }
+/* cards on the home and catalogue pages */
+[class*="st-key-gxcard"] { background:#ffffff; border-radius:16px; box-shadow:0 6px 20px rgba(15,27,45,0.05);
+  transition:border-color .15s, transform .15s, box-shadow .15s; }
+[class*="st-key-gxcard"]:hover { border-color:var(--accent) !important; transform:translateY(-2px);
+  box-shadow:0 12px 28px rgba(8,145,178,0.12); }
 .gx-card-icon { width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center;
-  background:rgba(34,211,238,0.10); border:1px solid rgba(34,211,238,0.3); color:var(--accent); font-size:1.25rem;
-  margin-bottom:10px; font-family:"Material Symbols Rounded"; }
-.gx-card-title { font-family:"Space Grotesk", sans-serif; font-weight:600; font-size:1.12rem; color:#fff; }
-.gx-card-text { color:var(--ink2); font-size:0.88rem; line-height:1.5; min-height:7.6em; margin:4px 0 12px; }
-.gx-status { display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-bottom:1px solid rgba(28,58,77,0.6); }
+  background:#ecf8fb; border:1px solid #c5e4ec; color:var(--accent-dark); font-size:1.25rem; margin-bottom:10px;
+  font-family:"Material Symbols Rounded"; }
+.gx-card-title { font-family:"Space Grotesk", sans-serif; font-weight:600; font-size:1.12rem; color:var(--ink); }
+.gx-card-text { color:var(--ink2); font-size:0.88rem; line-height:1.5; min-height:8.6em; padding-bottom:10px; margin-top:4px; }
+.gx-status { display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-bottom:1px solid #e8eef3; }
 .gx-status:last-child { border-bottom:none; }
 .gx-status .i { width:22px; height:22px; flex:none; border-radius:50%%; display:flex; align-items:center;
   justify-content:center; font-size:0.78rem; font-weight:700; margin-top:1px; }
-.gx-status .i.ok { background:rgba(12,163,12,0.18); color:#4ade80; border:1px solid rgba(74,222,128,0.4); }
-.gx-status .i.todo { background:rgba(250,178,25,0.12); color:#fbbf24; border:1px solid rgba(251,191,36,0.4); }
+.gx-status .i.ok { background:#e7f6e7; color:#006300; border:1px solid #9ad49a; }
+.gx-status .i.todo { background:#fff4dc; color:#8a5a00; border:1px solid #f2cf7a; }
 .gx-status .t { color:var(--ink); font-weight:600; font-size:0.92rem; }
 .gx-status .d { color:var(--muted); font-size:0.82rem; }
+.gx-flow { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:14px; margin:4px 0 8px; }
+@media (max-width: 900px) { .gx-flow { grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); } }
+.gx-flow .st { position:relative; background:#ffffff; border:1px solid var(--line); border-radius:14px; padding:13px 16px; }
+.gx-flow .n { font-family:"JetBrains Mono", ui-monospace, monospace; font-size:0.68rem; letter-spacing:0.16em;
+  color:var(--accent-dark); }
+.gx-flow .t { font-family:"Space Grotesk", sans-serif; font-weight:600; font-size:1rem; color:var(--ink); margin:3px 0 4px; }
+.gx-flow .d { font-size:0.84rem; color:var(--ink2); line-height:1.45; }
+@media (min-width: 901px) { .gx-flow .st:not(:last-child)::after { content:"→"; position:absolute; right:-13px;
+  top:50%%; transform:translateY(-50%%); width:12px; text-align:center; color:var(--accent); font-weight:700; } }
 .gx-step { display:flex; gap:14px; }
 .gx-step .num { flex:none; width:34px; height:34px; border-radius:50%%; display:flex; align-items:center;
-  justify-content:center; font-family:"Space Grotesk", sans-serif; font-weight:700; color:#04161d; background:var(--accent); }
+  justify-content:center; font-family:"Space Grotesk", sans-serif; font-weight:700; color:#ffffff;
+  background:linear-gradient(135deg, #0e7490, #0891b2); }
+.gx-step ul { margin:6px 0 0 0; padding-left:18px; color:#334155; }
 
 /* panels and notes */
 .gx-panel-title { font-family:"JetBrains Mono", ui-monospace, monospace; font-size:0.7rem; letter-spacing:0.18em;
-  text-transform:uppercase; color:#8fb3c4; font-weight:500; margin:6px 0 8px; }
+  text-transform:uppercase; color:#36687a; font-weight:500; margin:6px 0 8px; }
 .gx-note { font-size:0.82rem; color:var(--muted); line-height:1.5; }
 .gx-badge { display:inline-block; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; padding:2px 8px;
   border-radius:6px; margin-right:8px; border:1px solid transparent; }
-.gx-measured { background:rgba(57,135,229,0.16); color:#9cc5f6; border-color:rgba(57,135,229,0.45); }
-.gx-estimated { background:rgba(217,89,38,0.16); color:#f3a684; border-color:rgba(217,89,38,0.45); }
-.gx-derived { background:rgba(169,184,198,0.12); color:#cdd7e0; border-color:rgba(169,184,198,0.35); }
-.gx-interpolated { background:rgba(144,133,233,0.16); color:#c4bdf7; border-color:rgba(144,133,233,0.45); }
+.gx-measured { background:#e5effb; color:#1c5cab; border-color:#b5cff2; }
+.gx-estimated { background:#fdeee6; color:#a3401a; border-color:#f5c3ab; }
+.gx-derived { background:#eef2f6; color:#334155; border-color:#cfd8e1; }
+.gx-interpolated { background:#efebfa; color:#5b3a9b; border-color:#d3c8f1; }
+.gx-mixed { background:#fff7e0; color:#7a5300; border-color:#f2d58a; }
+.gx-meta { display:grid; grid-template-columns:118px 1fr; gap:5px 14px; font-size:0.86rem; margin:10px 0 12px; }
+.gx-meta dt { color:var(--muted); font-size:0.78rem; padding-top:1px; }
+.gx-meta dd { margin:0; color:var(--ink); }
+.gx-detail-title { font-family:"Space Grotesk", sans-serif; font-weight:600; font-size:1.18rem; color:var(--ink);
+  margin:2px 0 6px; line-height:1.25; }
 
 /* maps and widgets */
-iframe[title="streamlit_folium.st_folium"] { border-radius:16px; border:1px solid var(--line); }
+iframe[title="streamlit_folium.st_folium"] { border-radius:16px; border:1px solid var(--line);
+  box-shadow:0 6px 20px rgba(15,27,45,0.06); }
 [data-testid="stDeckGlJsonChart"] { border-radius:16px; overflow:hidden; border:1px solid var(--line); }
 .stTabs [data-baseweb="tab-list"] { gap:6px; border-bottom:1px solid var(--line); }
 .stTabs [data-baseweb="tab"] { padding:8px 14px; font-weight:500; }
-button[kind="primary"], [data-testid="stBaseButton-primary"] { color:#04161d !important; font-weight:600; }
-[data-testid="stPageLink"] a { border:1px solid rgba(34,211,238,0.35); border-radius:10px; padding:4px 12px;
-  justify-content:center; }
-[data-testid="stPageLink"] a:hover { background:rgba(34,211,238,0.08); border-color:var(--accent); }
+button[kind="primary"], [data-testid="stBaseButton-primary"] { background:linear-gradient(135deg, #0e7490, #0891b2) !important;
+  border-color:#0e7490 !important; color:#ffffff !important; font-weight:600; }
+[data-testid="stPageLink"] a { border:1px solid #c5e4ec; border-radius:10px; padding:4px 12px; justify-content:center;
+  background:#f8fbfc; }
+[data-testid="stPageLink"] a:hover { background:#ecf8fb; border-color:var(--accent); }
 </style>
 """
 
 LEAFLET_CSS = """
 <style>
-.leaflet-container { background:#0a1520; font-family:Inter, system-ui, sans-serif; }
-.leaflet-control-zoom a { background:#112130 !important; color:#e6edf3 !important; border-color:#1c3a4d !important; }
-.leaflet-control-zoom a:hover { background:#163049 !important; }
-.leaflet-bar { border:1px solid #1c3a4d !important; box-shadow:none !important; }
-.leaflet-control-layers { background:#0f1d2b !important; color:#dbe5ee !important; border:1px solid #1c3a4d !important;
-  border-radius:10px !important; box-shadow:none !important; }
-.leaflet-control-layers-separator { border-top-color:#1c3a4d !important; }
-.leaflet-control-attribution { background:rgba(10,21,32,0.75) !important; color:#7d8fa0 !important; }
-.leaflet-control-attribution a { color:#67e8f9 !important; }
-.leaflet-control-scale-line { background:rgba(10,21,32,0.7) !important; color:#dbe5ee !important;
-  border-color:#a9b8c6 !important; }
-.leaflet-tooltip { background:#0f1d2b; color:#e6edf3; border:1px solid #1c3a4d; border-radius:8px;
-  box-shadow:0 6px 18px rgba(0,0,0,0.4); }
-.leaflet-tooltip-top:before { border-top-color:#1c3a4d; }
-.leaflet-tooltip-bottom:before { border-bottom-color:#1c3a4d; }
-.leaflet-tooltip-left:before { border-left-color:#1c3a4d; }
-.leaflet-tooltip-right:before { border-right-color:#1c3a4d; }
+.leaflet-container { font-family:Inter, system-ui, sans-serif; }
+.leaflet-tooltip { border-radius:8px; border:1px solid #dbe4ec; box-shadow:0 6px 18px rgba(15,27,45,0.15); color:#0f1b2d; }
+.leaflet-control-layers, .leaflet-bar { border-radius:10px !important; }
 </style>
 """
 
 CARTO_ATTR = "© OpenStreetMap contributors © CARTO"
 TILES = {
-    "Dark": ("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", CARTO_ATTR, 20),
     "Light": ("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", CARTO_ATTR, 20),
+    "Streets": ("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", CARTO_ATTR, 20),
     "Satellite": ("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
                   "Imagery © Esri", 19),
     "Topographic (relief)": ("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
                              "© OpenStreetMap contributors, SRTM · style © OpenTopoMap (CC-BY-SA)", 17),
-    "Streets": ("OpenStreetMap", None, 19),
+    "Dark": ("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", CARTO_ATTR, 20),
 }
 
 
@@ -238,15 +249,14 @@ def kpis(items, cols=2):
         f'<div class="gx-kpi" style="--c:{c}"><div class="l">{html.escape(l)}</div>'
         f'<div class="v" title="{html.escape(str(v))}">{html.escape(str(v))}</div><div class="s">{html.escape(s)}</div></div>'
         for v, l, s, c in items)
-    st.markdown(f'<div class="gx-kpis" style="grid-template-columns:repeat({cols},minmax(0,1fr))">{cards}</div>',
-                unsafe_allow_html=True)
+    st.markdown(f'<div class="gx-kpis" style="--cols:{int(cols)}">{cards}</div>', unsafe_allow_html=True)
 
 
 def _text_on(hex_colour):
     h = hex_colour.lstrip("#")
     r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
     lum = sum(w * (v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4) for w, v in zip((0.2126, 0.7152, 0.0722), (r, g, b)))
-    return "#0a1520" if lum > 0.32 else "#ffffff"
+    return INK if lum > 0.32 else "#ffffff"
 
 
 def class_tags(suffix=""):
@@ -259,11 +269,29 @@ def class_tags(suffix=""):
 
 
 STATUS_WORDS = {
-    "measured": ("MEASURED", "gx-measured", "read in the field (SPT N, downhole Vs, Vs30 from surveys)"),
-    "derived": ("DERIVED", "gx-derived", "computed from measurements (MASW inversion, site class from a measured Vs30)"),
+    "measured": ("MEASURED", "gx-measured", "from a test at that spot (SPT N, downhole Vs, a site's Vs30 from a seismic "
+                                           "survey there)"),
+    "derived": ("DERIVED", "gx-derived", "computed from measurements (a Vs-depth curve inverted from MASW, site class "
+                                         "from a measured Vs30, region from coordinates)"),
     "estimated": ("ESTIMATED", "gx-estimated", "from a lookup, not a test (archive Vs30 and site class from lithology)"),
     "interpolated": ("INTERPOLATED", "gx-interpolated", "between measured sites (site-report Vs30 estimate)"),
 }
+
+
+VALUE_BADGES = {"Measured": "gx-measured", "Derived": "gx-derived", "Estimated": "gx-estimated",
+                "Interpolated": "gx-interpolated", "Mixed": "gx-mixed"}
+
+
+def value_badge(status):
+    """A coloured badge for a dataset's value status (measured, derived, ...)."""
+    s = str(status or "not stated")
+    word = s.split(" (")[0].upper()
+    return f'<span class="gx-badge {VALUE_BADGES.get(s.split(" ")[0], "gx-derived")}">{html.escape(word)}</span>'
+
+
+def can_download(record):
+    """Contributed files marked Registered users or Restricted are listed but not served (no sign-in yet)."""
+    return (record.get("access_level") or "Public") == "Public"
 
 
 def status_legend():
@@ -272,13 +300,29 @@ def status_legend():
                         for word, cls, text in STATUS_WORDS.values()), unsafe_allow_html=True)
 
 
+def flow(steps):
+    """A numbered left-to-right flow of (title, detail) steps, with arrows between them on wide screens."""
+    st.markdown('<div class="gx-flow">' + "".join(
+        f'<div class="st"><div class="n">STEP {i}</div><div class="t">{html.escape(t)}</div>'
+        f'<div class="d">{html.escape(d)}</div></div>' for i, (t, d) in enumerate(steps, 1)) + "</div>",
+        unsafe_allow_html=True)
+
+
 def panel_title(text):
     st.markdown(f'<div class="gx-panel-title">{html.escape(text)}</div>', unsafe_allow_html=True)
 
 
+def status_rows(items):
+    """items: (ok, title, detail). A tick or a warning sign, a bold title and one line of detail."""
+    st.markdown("".join(
+        f'<div class="gx-status"><div class="i {"ok" if ok else "todo"}">{"✓" if ok else "!"}</div>'
+        f'<div><div class="t">{html.escape(t)}</div><div class="d">{html.escape(d)}</div></div></div>'
+        for ok, t, d in items), unsafe_allow_html=True)
+
+
 # ---- maps --------------------------------------------------------------------------------
-def base_map(location=(45.55, -73.66), zoom=11, layers=("Dark", "Light", "Satellite", "Topographic (relief)", "Streets")):
-    """A folium map on the dark basemap, with the other basemaps one click away, and dark map controls."""
+def base_map(location=(45.55, -73.66), zoom=11, layers=("Light", "Streets", "Satellite", "Topographic (relief)")):
+    """A folium map on a light basemap, with the other basemaps one click away."""
     m = folium.Map(location=list(location), zoom_start=zoom, tiles=None, control_scale=True)
     for i, name in enumerate(layers):
         url, attr, max_zoom = TILES[name]
@@ -287,20 +331,41 @@ def base_map(location=(45.55, -73.66), zoom=11, layers=("Dark", "Light", "Satell
     return m
 
 
+def add_regions(m, selected=(), show=True, interactive=True):
+    """Borough and city outlines, with the selected ones filled. Hover shows the name when interactive; maps that
+    take clicks (placing a point, drawing) pass interactive=False so a click never picks up a whole region."""
+    gj = geo.regions_geojson()
+    if not gj:
+        return
+    sel = set(selected)
+    extra = {} if interactive else {"interactive": False}
+    folium.GeoJson(
+        gj, name="Boroughs and cities", show=show,
+        style_function=lambda f: {"color": ACCENT_DARK if f["properties"]["region"] in sel else "#5b7083",
+                                  "weight": 2.2 if f["properties"]["region"] in sel else 0.8,
+                                  "dashArray": None if f["properties"]["region"] in sel else "3 3",
+                                  "fillColor": ACCENT, "fillOpacity": 0.10 if f["properties"]["region"] in sel else 0.0,
+                                  **extra},
+        **({"highlight_function": lambda f: {"weight": 2.2, "color": ACCENT_DARK, "fillOpacity": 0.06},
+            "tooltip": folium.GeoJsonTooltip(fields=["region", "kind"], aliases=["", ""], labels=False)}
+           if interactive else {}),
+    ).add_to(m)
+
+
 def pin_icon(colour, size=16):
     """A teardrop pin in one of the data colours (folium's built-in icons only come in a few fixed colours)."""
     return folium.DivIcon(icon_size=(size, size), icon_anchor=(size // 2, size),
                           html=f'<div style="width:{size}px;height:{size}px;background:{colour};border:2px solid #fff;'
                                f'border-radius:50% 50% 50% 0;transform:rotate(-45deg);'
-                               f'box-shadow:0 2px 6px rgba(0,0,0,0.5)"></div>')
+                               f'box-shadow:0 2px 6px rgba(15,27,45,0.45)"></div>')
 
 
 def target_icon(size=26):
     return folium.DivIcon(icon_size=(size, size), icon_anchor=(size // 2, size // 2),
-                          html=f'<div style="width:{size}px;height:{size}px;border-radius:50%;border:2px solid {ACCENT};'
-                               f'box-shadow:0 0 0 4px rgba(34,211,238,0.25),0 0 18px rgba(34,211,238,0.6);'
-                               f'display:flex;align-items:center;justify-content:center"><div style="width:6px;height:6px;'
-                               f'border-radius:50%;background:{ACCENT}"></div></div>')
+                          html=f'<div style="width:{size}px;height:{size}px;border-radius:50%;border:2.5px solid {ACCENT_DARK};'
+                               f'background:rgba(255,255,255,0.75);box-shadow:0 0 0 4px rgba(8,145,178,0.25);'
+                               f'display:flex;align-items:center;justify-content:center"><div style="width:7px;height:7px;'
+                               f'border-radius:50%;background:{ACCENT_DARK}"></div></div>')
 
 
 # ---- data and settings -------------------------------------------------------------------
@@ -324,6 +389,10 @@ def load_archive(use_demo):
 @st.cache_data
 def load_vs():
     return data.load_vs()
+
+
+def region_names():
+    return geo.region_names()
 
 
 def archive_banner(label):

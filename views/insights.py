@@ -6,7 +6,7 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
-from geotech import insight, ui
+from geotech import catalogue, data, insight, ui
 
 ui.hero("Insights",
         "The whole dataset at a glance: how stiff the ground is, how velocity grows with depth in each soil, "
@@ -15,18 +15,28 @@ ui.hero("Insights",
 
 with st.sidebar:
     ui.sidebar_label("Filters")
+    regions = st.multiselect("Regions", catalogue.region_options(), placeholder="All boroughs and cities",
+                             key="ins_regions", help="Boroughs and linked cities; each point's region is derived from "
+                                                     "its coordinates and the City's limits.")
     show_far = st.toggle("Include Vs sites off the island", value=False)
 
 bh, samples, label = ui.load_archive(False)
 sites, prof = ui.load_vs()
 reg = insight.load_regressions()
 if not show_far:
-    sites = sites[sites["on_island"]]
-    prof = prof[prof["on_island"].astype(str).isin(["True", "nan", "None"])]
+    sites, prof = data.keep_on_island(sites), data.keep_on_island(prof)
+sites, prof, bh = data.in_regions(sites, regions), data.in_regions(prof, regions), data.in_regions(bh, regions)
+if regions:
+    st.markdown(f'<div class="gx-note" style="margin:-4px 0 10px">Showing {len(regions)} region'
+                f'{"s" if len(regions) > 1 else ""}: {html.escape(", ".join(regions))}.</div>', unsafe_allow_html=True)
 sites = sites.assign(site_class=sites["vs30_ms"].map(ui.nbcc_class))
 measured = sites.dropna(subset=["vs30_ms"])
 
 # ---- headline numbers -----------------------------------------------------------------
+if measured.empty:
+    st.info("No measured Vs30 site in the chosen regions yet. Pick other regions, or contribute data for these.",
+            icon=":material/filter_alt_off:")
+    st.stop()
 soft = int(measured["site_class"].isin(["D", "E"]).sum())
 ui.kpis([
     (f"{len(measured):,}", "Sites with measured Vs30", f"{len(sites) - len(measured)} more without a value", ui.VS_COLOUR),
@@ -35,7 +45,7 @@ ui.kpis([
     (f"{soft / max(len(measured), 1):.0%}", "Sites in class D or E", f"{soft} sites; class derived from measured Vs30",
      ui.SITE_CLASS_COLOURS["D"]),
     (f"{len(prof):,}", "Vs-depth readings", f"{prof['site_id'].nunique()} sites and lines, to "
-     f"{prof['depth_m'].max():.0f} m", ui.SITE_CLASS_COLOURS["E"]),
+     f"{prof['depth_m'].max():.0f} m" if not prof.empty else "none here", ui.SITE_CLASS_COLOURS["E"]),
     (f"{len(bh):,}" if not bh.empty else "not loaded", "Archive boreholes",
      "6,961 expected" if bh.empty else f"{int((bh['data_era'] == 'pre-1960').sum()):,} pre-1960",
      ui.ERA_COLOURS["1960 and later"]),
@@ -81,19 +91,22 @@ st.write("")
 # ---- areas and classes --------------------------------------------------------------------
 a, b = st.columns([1.3, 1], gap="large")
 with a:
-    ui.panel_title("Measured Vs30 by area")
-    order = measured.groupby("area")["vs30_ms"].median().sort_values().index.tolist()
+    ui.panel_title("Measured Vs30 by survey area or region")
+    group = st.segmented_control("Group by", ["Survey area", "Region"], default="Survey area", key="ins_group",
+                                 label_visibility="collapsed") or "Survey area"
+    gcol = "area" if group == "Survey area" else "region"
+    order = measured.groupby(gcol)["vs30_ms"].median().sort_values().index.tolist()
     log_x = alt.Scale(type="log", domain=[100, 2000])
     box = alt.Chart(measured).mark_boxplot(size=16, color=ui.CATEGORICAL[0], median={"color": "#ffffff"},
                                            rule={"color": ui.INK_2}, outliers={"color": ui.INK_2}).encode(
-        y=alt.Y("area:N", sort=order, title=None, axis=alt.Axis(labelLimit=220, labelPadding=8)),
+        y=alt.Y(f"{gcol}:N", sort=order, title=None, axis=alt.Axis(labelLimit=220, labelPadding=8)),
         x=alt.X("vs30_ms:Q", title="Vs30 (m/s, measured)", scale=log_x,
                 axis=alt.Axis(values=[100, 180, 360, 760, 1500])))
     ticks = alt.Chart(measured).mark_tick(color=ui.INK, opacity=0.55, thickness=1.5).encode(
-        y=alt.Y("area:N", sort=order), x=alt.X("vs30_ms:Q", scale=log_x),
-        tooltip=["site_id", "area", alt.Tooltip("vs30_ms:Q", format=".0f"), "survey_type"])
-    st.altair_chart((box + ticks).properties(height=400, padding={"left": 12, "right": 8, "top": 4, "bottom": 4}),
-                    width="stretch")
+        y=alt.Y(f"{gcol}:N", sort=order), x=alt.X("vs30_ms:Q", scale=log_x),
+        tooltip=["site_id", "area", "region", alt.Tooltip("vs30_ms:Q", format=".0f"), "survey_type"])
+    st.altair_chart((box + ticks).properties(height=max(160, 26 * len(order) + 50),
+                                             padding={"left": 12, "right": 8, "top": 4, "bottom": 4}), width="stretch")
     st.markdown('<div class="gx-note">Log scale, marked at the NBCC class limits (180, 360, 760, 1500 m/s). Each tick '
                 'is one site; boxes show the middle half.</div>', unsafe_allow_html=True)
 with b:
@@ -106,7 +119,7 @@ with b:
                                                                 range=list(ui.SITE_CLASS_COLOURS.values()))),
         tooltip=["class", "meaning", "sites"])
     labels = bars.mark_text(align="left", dx=6, color=ui.INK_2, fontSize=12).encode(text="sites:Q", color=alt.value(ui.INK_2))
-    st.altair_chart((bars + labels).properties(height=210), width="stretch")
+    st.altair_chart((bars + labels).properties(height=210, padding={"left": 4, "right": 28}), width="stretch")
     ui.class_tags()
     by_type = measured.groupby("survey_type")["vs30_ms"].agg(["count", "median"]).round(0).reset_index()
     by_type.columns = ["Survey type", "Sites", "Median Vs30 (m/s)"]
@@ -122,7 +135,7 @@ with c:
     layer = pdk.Layer("HexagonLayer", pts3, get_position=["lon", "lat"], radius=600, elevation_scale=4,
                       elevation_range=[0, 1000], extruded=True, coverage=0.88, pickable=True,
                       color_range=[[int(h[i:i + 2], 16) for i in (1, 3, 5)] for h in ui.SEQUENTIAL])
-    st.pydeck_chart(pdk.Deck(layers=[layer], map_provider="carto", map_style=pdk.map_styles.CARTO_DARK,
+    st.pydeck_chart(pdk.Deck(layers=[layer], map_provider="carto", map_style=pdk.map_styles.CARTO_LIGHT,
                              initial_view_state=pdk.ViewState(latitude=45.53, longitude=-73.63, zoom=9.8, pitch=50,
                                                               bearing=-20),
                              tooltip={"html": "{elevationValue} measurement locations in this 600 m cell"}),
@@ -148,7 +161,7 @@ with d:
             "duplicate of an earlier sheet": "Repeated between source sheets; removed from counts.",
             "bad depth": "Depth below zero (LM04-1, -0.04 m); kept and flagged.",
             "method blank in source": "Method not stated (MM09-2); not called measured.",
-            "outside island box": "Site lies off the island.",
+            "off the island": "Site lies outside the agglomeration limits (plus 250 m); hidden unless you include off-island sites.",
         }).fillna("")
         st.markdown("".join(
             f'<div class="gx-status"><div class="i todo">!</div><div><div class="t">{html.escape(r.flag)} · '

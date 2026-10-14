@@ -42,6 +42,7 @@ def load_archive(use_demo=False):
     bh["lon"], bh["lat"] = np.round(lon, 6), np.round(lat, 6)
     if "data_era" not in bh.columns:
         bh["data_era"] = bh["year"].map(era_label) if "year" in bh.columns else "undated"
+    bh["region"] = geo.region_of(bh["x_mtm8"].to_numpy(float), bh["y_mtm8"].to_numpy(float))
     if "vs30_ms" in bh.columns and "vs30_status" not in bh.columns:
         # Archive Vs30 comes from a lithology lookup (Rosset et al. 2023); never measured.
         bh["vs30_status"] = "estimated (lithology lookup, Rosset et al. 2023)"
@@ -69,7 +70,41 @@ def load_vs():
     prof = pd.read_csv(config.VS_PROFILES_CSV, low_memory=False) if config.VS_PROFILES_CSV.exists() else pd.DataFrame()
     if not prof.empty:
         prof = prof[~prof["duplicate_of_earlier_sheet"].fillna(False).astype(bool)]  # drop rows repeated between sheets
+    # Region (borough or linked city) is derived here from the coordinates and the City's limits; not stored.
+    for df in (sites, prof):
+        if not df.empty:
+            df["region"] = geo.region_of(df["x_mtm8"].to_numpy(float), df["y_mtm8"].to_numpy(float))
     return sites, prof
+
+
+def upload_regions(record):
+    """Regions an uploaded file's footprint touches (its stored list when present)."""
+    if record.get("region"):
+        return [r.strip() for r in str(record["region"]).split(";") if r.strip()]
+    fp = record.get("footprint_wkt_mtm8")
+    return geo.regions_touching(shp_wkt.loads(fp)) if fp else []
+
+
+def upload_years(record):
+    """(first, last) year of the work in an uploaded record; (None, None) when undated."""
+    y0, y1 = record.get("work_year"), record.get("work_year_end")
+    y0 = None if y0 in (None, "") or pd.isna(y0) else int(y0)
+    y1 = None if y1 in (None, "") or pd.isna(y1) else int(y1)
+    return (y0, y1 if y1 is not None else y0) if y0 is not None else (y1, y1)
+
+
+def keep_on_island(df):
+    """Drop rows known to lie off the island; rows with no location (on_island blank) are kept."""
+    if df.empty or "on_island" not in df.columns:
+        return df
+    return df[~df["on_island"].eq(False)]
+
+
+def in_regions(df, names):
+    """Rows whose region is one of names (all rows when names is empty)."""
+    if df.empty or not names or "region" not in df.columns:
+        return df
+    return df[df["region"].isin(names)]
 
 
 # ---- selection -------------------------------------------------------------
@@ -78,6 +113,9 @@ def selection_from_inputs(mode, drawing=None, click=None, radius_m=500):
     """Build a selection geometry in MTM 8 (None means the whole island)."""
     if mode == "Whole island":
         return None
+    if mode == "Region":
+        shp = geo.region_shape(click or [])  # for regions, the second input is the list of region names
+        return "incomplete" if shp is None else shp
     if mode == "Point and radius" and click:
         x, y = geo.wgs84_to_mtm8(click["lng"], click["lat"])
         return Point(x, y).buffer(radius_m)

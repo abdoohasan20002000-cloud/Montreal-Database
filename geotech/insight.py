@@ -63,10 +63,11 @@ def nbcc_class(vs30):
 CLASS_WORDS = {"A": "hard rock", "B": "rock", "C": "very dense soil or soft rock", "D": "stiff soil", "E": "soft soil"}
 
 
-def summary(lat, lon, radius_m, near, est, n_used, n_prof_rows, n_prof_sites, bh_near, on_island):
+def summary(lat, lon, radius_m, near, est, n_used, n_prof_rows, n_prof_sites, bh_near, on_island, region=""):
     """A short plain-language paragraph for a site report."""
     parts = []
-    where = f"Around {lat:.5f}, {lon:.5f}" + ("" if on_island else " (outside the island box)")
+    place = f" in {region}" if region and on_island else ""
+    where = f"Around {lat:.5f}, {lon:.5f}{place}" + ("" if on_island else " (outside the island)")
     if near.empty:
         parts.append(f"{where} there is no measured Vs30 within {radius_m / 1000:.1f} km. "
                      "Widen the search radius, or treat this location as unmeasured.")
@@ -99,13 +100,17 @@ def summary(lat, lon, radius_m, near, est, n_used, n_prof_rows, n_prof_sites, bh
     return " ".join(parts)
 
 
-def report_table(lat, lon, x, y, radius_m, near, est, n_used):
+def report_table(lat, lon, x, y, radius_m, near, est, n_used, region=""):
     """One row per value in the report, with status, method, source and date."""
     today = date.today().isoformat()
     rows = [{"item": "location (WGS84)", "value": f"{lat:.6f}, {lon:.6f}", "status": "input", "method": "picked by user",
              "source": "", "date": today},
             {"item": "location (MTM 8, EPSG:32188)", "value": f"{x:.1f} E, {y:.1f} N", "status": "derived",
              "method": "pyproj transform", "source": "", "date": today}]
+    if region:
+        rows.append({"item": "region (borough or linked city)", "value": region, "status": "derived",
+                     "method": "point in polygon, MTM 8", "source": "City of Montréal administrative limits (CC BY 4.0)",
+                     "date": today})
     for _, r in near.head(n_used or 5).iterrows():
         rows.append({"item": f"Vs30 at site {r['site_id']} ({r['distance_m']:.0f} m)", "value": f"{r['vs30_ms']:.0f} m/s",
                      "status": "measured", "method": r.get("survey_type", ""), "source": r.get("source", ""),

@@ -10,6 +10,8 @@ SAMPLES_CSV = DATA_DIR / "spt_samples.csv"
 VS30_SITES_CSV = DATA_DIR / "vs30_sites.csv"        # measured Vs30 sites (Rosset compilation)
 VS_PROFILES_CSV = DATA_DIR / "vs_profiles.csv"      # Vs-depth profiles
 ISLAND_OUTLINE = DATA_DIR / "island_outline.geojson"  # optional, enables the precise island check
+REGIONS_GEOJSON = DATA_DIR / "regions.geojson"  # boroughs and linked cities (scripts/fetch_regions.py)
+OFF_ISLAND = "Off the island"  # region label for points outside every borough and city
 DEMO_BOREHOLES_CSV = DATA_DIR / "demo" / "boreholes_DEMO.csv"
 DEMO_SAMPLES_CSV = DATA_DIR / "demo" / "spt_samples_DEMO.csv"
 
@@ -57,8 +59,18 @@ SAMPLE_COLUMNS = {
     "qa_flags": ["qa_flags"],
 }
 
-DATA_TYPES = ["Borehole log", "Lab results", "Geophysics", "Report", "Map / GIS", "Photo", "Other"]
+# Any kind of ground data collected in Montréal. Older uploads may carry earlier names ("Lab results", "Geophysics").
+DATA_TYPES = [
+    "Borehole log", "SPT (standard penetration test)", "CPT / CPTu (cone penetration)",
+    "Lab tests (index, strength, consolidation)", "Shear-wave velocity (Vs, Vs30)", "Ambient vibration (H/V, f0)",
+    "Other geophysics (ERT, GPR, refraction)", "Groundwater (piezometers, levels)", "Bedrock depth or outcrop",
+    "Monitoring (settlement, inclinometers, vibration)", "Ground deformation (InSAR, levelling)",
+    "Earthquake or strong-motion record", "Environmental sampling (soil, water)", "Map / GIS layer", "Report",
+    "Photo or scan", "Other",
+]
 SOURCE_ORGS = ["City of Montréal", "MTQ", "MELCC", "Consultant", "University", "Private", "Other"]
 VALUE_STATUS = ["Measured", "Derived", "Interpolated", "Estimated", "Mixed", "Not applicable (no numerical values)"]
-LICENCES = ["CC BY 4.0", "Open Government Licence – Québec", "Restricted, no reuse", "Other (see notes)"]
+LICENCES = ["CC BY 4.0", "Open Government Licence – Québec", "Restricted, no reuse", "Not stated (ask the source)",
+            "Other (see notes)"]
 ACCESS_LEVELS = ["Public", "Registered users", "Restricted"]
+SINCE_YEAR = 2001  # the "since 2001" preset in the catalogue year filter

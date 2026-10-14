@@ -45,7 +45,7 @@ s[["x_mtm8", "y_mtm8"]] = s[["x_mtm8", "y_mtm8"]].round(1)
 s["on_island"] = [geo.on_island(a, b) for a, b in zip(s["x_mtm8"], s["y_mtm8"])]
 s["vs30_status"] = s["vs30_ms"].map(lambda v: "measured (field seismic survey)" if pd.notna(v) else "no value")
 s["qa_flags"] = ""
-s.loc[~s["on_island"], "qa_flags"] += "outside island box;"
+s.loc[~s["on_island"], "qa_flags"] += "off the island;"
 s.loc[s["vs30_ms"].isna(), "qa_flags"] += "no Vs30;"
 out_range = s["vs30_ms"].notna() & ~s["vs30_ms"].between(config.VS30_MIN, config.VS30_MAX)
 s.loc[out_range, "qa_flags"] += f"Vs30 outside {config.VS30_MIN}-{config.VS30_MAX};"
@@ -56,7 +56,8 @@ s["processed_on"] = TODAY
 cols = ["site_id", "survey_type", "area", "prefix", "vs30_ms", "vs30_status", "f0_hz", "elevation_m",
         "lat", "lon", "x_mtm8", "y_mtm8", "on_island", "qa_flags", "source", "method", "processed_on"]
 s[cols].to_csv(OUT / "vs30_sites.csv", index=False)
-note(f"vs30_sites.csv: {len(s)} sites; {int(s['on_island'].sum())} inside the rough island box, {int((~s['on_island']).sum())} outside it "
+note(f"vs30_sites.csv: {len(s)} sites; {int(s['on_island'].sum())} on the island ({geo.island_shape_mtm8()[1]}), "
+     f"{int((~s['on_island']).sum())} off it "
      f"({', '.join(sorted(s.loc[~s['on_island'], 'area'].dropna().unique()))}); "
      f"{int(s['vs30_ms'].isna().sum())} without a Vs30 value; {int(out_range.sum())} outside {config.VS30_MIN}-{config.VS30_MAX} m/s.")
 

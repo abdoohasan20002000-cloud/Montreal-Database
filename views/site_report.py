@@ -38,6 +38,7 @@ pt = state.get("sr_point")
 left, right = st.columns([1.15, 1], gap="large")
 with left:
     m = ui.base_map((pt["lat"], pt["lng"]) if pt else (45.55, -73.66), 13 if pt else 11)
+    ui.add_regions(m, interactive=False)
     for r in sites.dropna(subset=["vs30_ms"]).to_dict("records"):
         folium.CircleMarker([r["lat"], r["lon"]], radius=5, color="#ffffff", weight=1.2, fill=True, fill_opacity=0.95,
                             fill_color=ui.SITE_CLASS_COLOURS.get(ui.nbcc_class(r["vs30_ms"]), ui.ERA_COLOURS["undated"]),
@@ -69,9 +70,10 @@ bh_near = None
 if not bh.empty:
     bh_near = bh[((bh["x_mtm8"] - x) ** 2 + (bh["y_mtm8"] - y) ** 2) <= radius ** 2]
 on_island = geo.on_island(x, y)
+region = str(geo.region_of(x, y)[0])  # "" only when the regions file is missing
 
 with right:
-    ui.panel_title(f"Report · {lat:.5f}, {lon:.5f} · MTM 8 {x:,.0f} E {y:,.0f} N")
+    ui.panel_title(f"Report · {region + ' · ' if region else ''}{lat:.5f}, {lon:.5f} · MTM 8 {x:,.0f} E {y:,.0f} N")
     nearest = near.iloc[0] if not near.empty else None
     ui.kpis([
         (f"{nearest['vs30_ms']:.0f} m/s" if nearest is not None else "none",
@@ -83,7 +85,8 @@ with right:
          ui.SITE_CLASS_COLOURS.get(cls, ui.ERA_COLOURS["undated"])),
         (f"{p_near['site_id'].nunique()}", "Vs profiles nearby", f"{len(p_near)} depth readings", ui.SITE_CLASS_COLOURS["D"]),
     ])
-    text = insight.summary(lat, lon, radius, near, est, n_used, len(p_near), p_near["site_id"].nunique(), bh_near, on_island)
+    text = insight.summary(lat, lon, radius, near, est, n_used, len(p_near), p_near["site_id"].nunique(), bh_near,
+                           on_island, region)
     st.markdown('<span class="gx-badge gx-interpolated">SUMMARY</span><span class="gx-note">includes interpolated '
                 'and derived values, labelled in the text</span>', unsafe_allow_html=True)
     st.write(text)
@@ -124,7 +127,7 @@ with b:
                 tooltip=["fit", "equation"]))
         st.altair_chart(alt.layer(*layers).properties(height=320), width="stretch")
 
-table = insight.report_table(lat, lon, x, y, radius, near, est, n_used)
+table = insight.report_table(lat, lon, x, y, radius, near, est, n_used, region)
 with st.expander("Report table: every value with its status, method, source and date", icon=":material/table:"):
     st.dataframe(table, hide_index=True, width="stretch")
 md = (f"# Site report\n\n{text}\n\nInterpolation method: {insight.IDW_METHOD}.\n\n"

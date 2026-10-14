@@ -13,6 +13,7 @@ pages = {
         st.Page("views/guide.py", title="User guide", icon=":material/menu_book:"),
     ],
     "Explore the data": [
+        st.Page("views/catalogue.py", title="Data catalogue", icon=":material/dataset:"),
         st.Page("views/explore.py", title="Map and 3D", icon=":material/map:"),
         st.Page("views/insights.py", title="Insights", icon=":material/insights:"),
         st.Page("views/site_report.py", title="Site report", icon=":material/location_searching:"),
