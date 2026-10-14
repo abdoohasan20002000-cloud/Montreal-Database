@@ -16,6 +16,11 @@ from .data import _normalise
 CHECK_ROWS = 200_000
 
 
+def _n(count, one, many):
+    """'1 row' / '3 rows'."""
+    return f"{count:,} {one if count == 1 else many}"
+
+
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -88,7 +93,7 @@ def check_table(df):
     if "hole_id" in df.columns and not has_depths:
         dup = df["hole_id"][df["hole_id"].duplicated()].astype(str).unique()
         if len(dup):
-            out.append(("warn", f"{len(dup)} hole IDs repeat: {', '.join(dup[:10])}"))
+            out.append(("warn", f"{_n(len(dup), 'hole ID repeats', 'hole IDs repeat')}: {', '.join(dup[:10])}"))
         else:
             out.append(("ok", "Hole IDs are unique."))
 
@@ -101,10 +106,12 @@ def check_table(df):
         swapped = np.zeros(len(xy), dtype=bool)
         swapped[off] = geo.on_island_many(y[off], x[off])
         if bad_xy.any():
-            out.append(("warn", f"{int(bad_xy.sum())} rows have missing or unreadable coordinates."))
+            out.append(("warn", f"{_n(int(bad_xy.sum()), 'row has', 'rows have')} missing or unreadable coordinates."))
         if off.any():
-            msg = f"{int(off.sum())} rows are off the island (MTM 8)"
-            out.append(("warn", msg + (f"; {int(swapped.sum())} look like X and Y swapped." if swapped.any() else ".")))
+            msg = f"{_n(int(off.sum()), 'row is', 'rows are')} off the island (MTM 8)"
+            n_sw = int(swapped.sum())
+            out.append(("warn", msg + (f"; {n_sw:,} {'looks' if n_sw == 1 else 'look'} like X and Y swapped."
+                                       if n_sw else ".")))
         if not off.any() and not bad_xy.any():
             out.append(("ok", "All coordinates are on the island (MTM 8)."))
 
@@ -113,19 +120,19 @@ def check_table(df):
         bot = pd.to_numeric(df["depth_bot_m"], errors="coerce")
         bad = (top < 0) | (bot <= top)
         if bad.any():
-            out.append(("warn", f"{int(bad.sum())} rows have negative depth or bottom not below top."))
+            out.append(("warn", f"{_n(int(bad.sum()), 'row has', 'rows have')} negative depth or bottom not below top."))
         if "hole_id" in df.columns:
             d = pd.DataFrame({"h": df["hole_id"], "t": top, "b": bot}).dropna().sort_values(["h", "t"])
             overlap = (d.groupby("h")["b"].shift() > d["t"] + 1e-6).sum()
             if overlap:
-                out.append(("warn", f"{int(overlap)} samples or layers overlap the one above in the same hole."))
+                out.append(("warn", f"{_n(int(overlap), 'sample or layer overlaps', 'samples or layers overlap')} the one above in the same hole."))
         if not bad.any():
             out.append(("ok", "Depths are consistent."))
 
     if "n_field" in df.columns:
         n = pd.to_numeric(df["n_field"], errors="coerce")
         if (n >= 999).any():
-            out.append(("warn", f"{int((n >= 999).sum())} N-values of 999 or more: code refusals in a refusal column, not as N = 999."))
+            out.append(("warn", f"{_n(int((n >= 999).sum()), 'N-value', 'N-values')} of 999 or more: code refusals in a refusal column, not as N = 999."))
         if "refusal" not in df.columns:
             out.append(("warn", "No refusal column: refusals cannot be told apart from N-values."))
         if n.isin([50, 100]).sum() > 0.05 * n.notna().sum() and n.notna().sum() >= 20:
@@ -135,12 +142,12 @@ def check_table(df):
         v = pd.to_numeric(df["vs30_ms"], errors="coerce")
         outside = v.notna() & ((v < config.VS30_MIN) | (v > config.VS30_MAX))
         if outside.any():
-            out.append(("warn", f"{int(outside.sum())} Vs30 values outside {config.VS30_MIN}-{config.VS30_MAX} m/s."))
+            out.append(("warn", f"{_n(int(outside.sum()), 'Vs30 value', 'Vs30 values')} outside {config.VS30_MIN}-{config.VS30_MAX} m/s."))
         if "vs30_status" not in df.columns:
             out.append(("warn", "Vs30 given without vs30_status: say whether it is measured or estimated."))
 
     if "year" in df.columns:
         y = pd.to_numeric(df["year"], errors="coerce")
         if (y < config.PRE_MODERN_YEAR).any():
-            out.append(("warn", f"{int((y < config.PRE_MODERN_YEAR).sum())} rows dated before 1960 (flag pre-1960)."))
+            out.append(("warn", f"{_n(int((y < config.PRE_MODERN_YEAR).sum()), 'row', 'rows')} dated before 1960 (flag pre-1960)."))
     return out
