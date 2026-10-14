@@ -12,7 +12,7 @@ MANIFEST_FIELDS = ["id", "submission_id", "title", "data_type", "file_name", "fi
                    "footprint_wkt_mtm8", "status", "reviewed_by", "reviewed_at", "notes", "in_zip"]
 
 
-def readme(area_label, data_label, n_bh, n_s, n_files, n_vs=0, n_prof=0):
+def readme(area_label, data_label, n_bh, n_s, n_files, n_vs=0, n_prof=0, n_vs_value=None):
     return f"""Montréal geotechnical data: download
 Created {now_iso()} for: {area_label}
 Archive source: {data_label}
@@ -22,8 +22,9 @@ Contents
                     lon / lat (WGS84) are a convenience copy for web maps.
   spt_samples.csv   {n_s} SPT samples. n_field is the raw field N, never corrected here.
                     refusal = True marks a refusal: a censored value, not N = 999.
-  vs30_sites.csv    {n_vs} sites with a Vs30 from field seismic surveys (Rosset compilation). MEASURED,
-                    unlike the borehole Vs30 below. Columns method/source/processed_on say how each was made.
+  vs30_sites.csv    {n_vs} sites, {n_vs if n_vs_value is None else n_vs_value} of them with a Vs30 from a seismic survey at
+                    the site (Rosset compilation). MEASURED, unlike the borehole Vs30 below; sites with a blank
+                    vs30_ms have no value in the source. Columns method/source/processed_on say how each was made.
   vs_profiles.csv   {n_prof} Vs-depth rows. vs_status says measured (downhole) or derived (MASW inversion,
                     minivib travel times). Rows with no location are left out of area selections.
   manifest.csv      one row per contributed file: metadata card, licence, check status.
@@ -48,7 +49,9 @@ def build_zip(boreholes, samples, uploads, get_bytes, area_label, data_label, vs
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         n_vs = 0 if vs_sites is None else len(vs_sites)
         n_prof = 0 if vs_prof is None else len(vs_prof)
-        z.writestr("README.txt", readme(area_label, data_label, len(boreholes), len(samples), len(uploads), n_vs, n_prof))
+        n_value = 0 if vs_sites is None or "vs30_ms" not in vs_sites else int(vs_sites["vs30_ms"].notna().sum())
+        z.writestr("README.txt", readme(area_label, data_label, len(boreholes), len(samples), len(uploads), n_vs, n_prof,
+                                        n_value))
         if n_vs:
             z.writestr("vs30_sites.csv", vs_sites.to_csv(index=False))
         if n_prof:

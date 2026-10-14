@@ -151,3 +151,15 @@ def test_zip_lists_but_leaves_out_restricted_files():
 def test_on_island_filter_keeps_unlocated_rows():
     df = pd.DataFrame({"on_island": pd.Series([True, False, None], dtype=object)})
     assert len(data.keep_on_island(df)) == 2
+
+
+def test_tooltip_text_cannot_break_out_of_folium_template():
+    from geotech import ui
+    tip = ui.safe_tip("x`);alert(1);(`<img src=x onerror=alert(2)> ${y} C:\\users")
+    assert not any(c in tip for c in "`$<>\\")
+
+
+def test_shore_band_points_take_the_nearest_region():
+    x, y = geo.wgs84_to_mtm8(-73.70307, 45.54655)  # inside the island check's 250 m tolerance, outside every region
+    assert geo.on_island(x, y)
+    assert geo.region_of(x, y)[0] == geo.regions_touching(Point(x, y))[0] != "Off the island"

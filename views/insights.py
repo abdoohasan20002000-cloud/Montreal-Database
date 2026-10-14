@@ -6,7 +6,7 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
-from geotech import catalogue, data, insight, ui
+from geotech import catalogue, config, data, insight, ui
 
 ui.hero("Insights",
         "The whole dataset at a glance: how stiff the ground is, how velocity grows with depth in each soil, "
@@ -23,7 +23,7 @@ with st.sidebar:
 bh, samples, label = ui.load_archive(False)
 sites, prof = ui.load_vs()
 reg = insight.load_regressions()
-if not show_far:
+if not show_far and config.OFF_ISLAND not in regions:  # picking "Off the island" is asking for those sites
     sites, prof = data.keep_on_island(sites), data.keep_on_island(prof)
 sites, prof, bh = data.in_regions(sites, regions), data.in_regions(prof, regions), data.in_regions(bh, regions)
 if regions:
@@ -45,9 +45,9 @@ ui.kpis([
     (f"{soft / max(len(measured), 1):.0%}", "Sites in class D or E", f"{soft} sites; class derived from measured Vs30",
      ui.SITE_CLASS_COLOURS["D"]),
     (f"{len(prof):,}", "Vs-depth readings", f"{prof['site_id'].nunique()} sites and lines, to "
-     f"{prof['depth_m'].max():.0f} m" if not prof.empty else "none here", ui.SITE_CLASS_COLOURS["E"]),
-    (f"{len(bh):,}" if not bh.empty else "not loaded", "Archive boreholes",
-     "6,961 expected" if bh.empty else f"{int((bh['data_era'] == 'pre-1960').sum()):,} pre-1960",
+     f"{prof['depth_m'].max():.0f} m" if not prof.empty else "none here", ui.ACCENT),
+    (f"{len(bh):,}" if not bh.empty else "–", "Archive boreholes",
+     "not loaded; 6,961 expected" if bh.empty else f"{int((bh['data_era'] == 'pre-1960').sum()):,} pre-1960",
      ui.ERA_COLOURS["1960 and later"]),
 ], cols=5)
 st.write("")
@@ -58,18 +58,22 @@ st.markdown(f'<div class="gx-note" style="margin:-2px 0 6px"><span style="color:
             f'or derived Vs reading &nbsp;&nbsp;<span style="color:{ui.INK}">━━</span> clay fit (Rosset) &nbsp;&nbsp;'
             f'<span style="color:{ui.INK}">╍╍</span> sand fit (Rosset)</div>', unsafe_allow_html=True)
 SOILS = ["clay", "silt", "sand", "till"]
-pts = prof[(prof["profile_source"] == "01_Vs_POINTS") & prof["soil_type"].isin(SOILS)]
+all_pts = prof[prof["profile_source"] == "01_Vs_POINTS"]
+n_other = int((~all_pts["soil_type"].isin(SOILS)).sum())  # fill, rock or no soil type in the source
+pts = all_pts[all_pts["soil_type"].isin(SOILS)]
 n_fast = int((pts["vs_ms"] > 1000).sum())
 pts = pts[(pts["vs_ms"] <= 1000) & (pts["depth_m"] <= 40)]
 curves = insight.regression_curves(reg[reg["fit"].isin(["reg_sand", "reg_clay"])]) if not reg.empty else pd.DataFrame()
 x_scale, y_scale = alt.Scale(domain=[0, 1000]), alt.Scale(reverse=True, domain=[0, 40])
-for col, soil in zip(st.columns(len(SOILS), gap="small"), SOILS):
+wide = st.container(key="soilpanels").columns(4, gap="small")  # two by two on narrow screens (CSS in ui.py)
+for i, soil in enumerate(SOILS):
     p = pts[pts["soil_type"] == soil]
-    with col:
+    with wide[i]:
         chart = alt.Chart(p).mark_circle(size=34, opacity=0.7, color=ui.CATEGORICAL[0], stroke=ui.SURFACE,
                                          strokeWidth=0.6).encode(
-            x=alt.X("vs_ms:Q", title="Vs (m/s)", scale=x_scale, axis=alt.Axis(values=[0, 250, 500, 750, 1000])),
-            y=alt.Y("depth_m:Q", title="Depth (m)" if soil == SOILS[0] else None, scale=y_scale),
+            x=alt.X("vs_ms:Q", title="Vs (m/s)", scale=x_scale,
+                    axis=alt.Axis(values=[0, 500, 1000], labelOverlap="greedy", labelSeparation=4)),
+            y=alt.Y("depth_m:Q", title="Depth (m)", scale=y_scale),
             tooltip=["site_id", "soil_type", alt.Tooltip("depth_m:Q", format=".1f"), alt.Tooltip("vs_ms:Q", format=".0f"),
                      "vs_status"])
         if not curves.empty:
@@ -78,11 +82,12 @@ for col, soil in zip(st.columns(len(SOILS), gap="small"), SOILS):
                 strokeDash=alt.StrokeDash("fit:N", legend=None, scale=alt.Scale(
                     domain=["clay (Rosset fit)", "sand (Rosset fit)"], range=[[1, 0], [5, 4]])),
                 tooltip=["fit", "equation"])
-        st.altair_chart(chart.properties(height=300, title=alt.TitleParams(f"{soil} · {len(p)} readings",
-                                                                            anchor="start", fontSize=13)),
+        st.altair_chart(chart.properties(height=300, title=alt.TitleParams(f"{soil} ({len(p)})", anchor="start",
+                                                                            fontSize=13, limit=0)),
                         width="stretch")
 st.markdown('<div class="gx-note">Each panel shows the readings logged in one soil (downhole, MASW and minivib; sheet '
-            f'01_Vs_POINTS, duplicates removed; {n_fast} readings above 1,000 m/s not drawn). The two lines, the same in '
+            f'01_Vs_POINTS, duplicates removed; the number in brackets counts them; {n_fast} readings above 1,000 m/s '
+            f'and {n_other} in fill, rock or with no soil type are not drawn). The two lines, the same in '
             'every panel, are the Rosset sand (dashed) and clay (solid) regressions, Vs = a + b·z<sup>c</sup>; the '
             'equation form is inferred from the fitted coefficients, which match the published Table 3.</div>',
             unsafe_allow_html=True)
@@ -109,21 +114,23 @@ with a:
                                              padding={"left": 12, "right": 8, "top": 4, "bottom": 4}), width="stretch")
     st.markdown('<div class="gx-note">Log scale, marked at the NBCC class limits (180, 360, 760, 1500 m/s). Each tick '
                 'is one site; boxes show the middle half.</div>', unsafe_allow_html=True)
+    by_type = measured.groupby("survey_type")["vs30_ms"].agg(["count", "median"]).round(0).reset_index()
+    by_type.columns = ["Survey type", "Sites", "Median Vs30 (m/s)"]
+    st.dataframe(by_type, hide_index=True, width="stretch",
+                 column_config={"Median Vs30 (m/s)": st.column_config.NumberColumn(format="%.0f")})
 with b:
     ui.panel_title("NBCC site class, derived from measured Vs30")
     cls = measured["site_class"].value_counts().reindex(list("ABCDE"), fill_value=0).rename_axis("class").reset_index(name="sites")
     cls["meaning"] = cls["class"].map(insight.CLASS_WORDS)
     bars = alt.Chart(cls).mark_bar(cornerRadiusEnd=4, height=22).encode(
-        y=alt.Y("class:N", title=None, sort=list("ABCDE")), x=alt.X("sites:Q", title="Sites"),
-        color=alt.Color("class:N", legend=None, scale=alt.Scale(domain=list(ui.SITE_CLASS_COLOURS),
-                                                                range=list(ui.SITE_CLASS_COLOURS.values()))),
+        y=alt.Y("class:N", title=None, sort=list("ABCDE")),
+        x=alt.X("sites:Q", title="Sites", axis=alt.Axis(tickMinStep=1, format="d")),
+        color=alt.Color("class:N", legend=None, scale=alt.Scale(domain=list("ABCDE"),
+                                                                range=[ui.SITE_CLASS_COLOURS[k] for k in "ABCDE"])),
         tooltip=["class", "meaning", "sites"])
     labels = bars.mark_text(align="left", dx=6, color=ui.INK_2, fontSize=12).encode(text="sites:Q", color=alt.value(ui.INK_2))
     st.altair_chart((bars + labels).properties(height=210, padding={"left": 4, "right": 28}), width="stretch")
     ui.class_tags()
-    by_type = measured.groupby("survey_type")["vs30_ms"].agg(["count", "median"]).round(0).reset_index()
-    by_type.columns = ["Survey type", "Sites", "Median Vs30 (m/s)"]
-    st.dataframe(by_type, hide_index=True, width="stretch")
 
 # ---- coverage and quality -------------------------------------------------------------------
 c, d = st.columns([1.3, 1], gap="large")
@@ -138,11 +145,13 @@ with c:
     st.pydeck_chart(pdk.Deck(layers=[layer], map_provider="carto", map_style=pdk.map_styles.CARTO_LIGHT,
                              initial_view_state=pdk.ViewState(latitude=45.53, longitude=-73.63, zoom=9.8, pitch=50,
                                                               bearing=-20),
-                             tooltip={"html": "{elevationValue} measurement locations in this 600 m cell"}),
+                             tooltip={"html": "{elevationValue} data points in this 600 m cell (Vs30 sites, profile "
+                                              "positions, boreholes)"}),
                     height=360, width="stretch")
-    st.markdown('<div class="gx-note">Each column is a 600 m hexagon; height and colour count Vs30 sites, Vs profile '
-                'locations and boreholes inside it (a profile counts once, however many depths it has). Gaps are '
-                'where new measurements would help most.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="gx-note">Each column is a 600 m hexagon; height and colour count the Vs30 sites, distinct '
+                'Vs-profile positions and boreholes inside it. A profile counts once however many depths it has, and '
+                'profiles placed at the same site or line centroid share one position. A site with both a Vs30 and a '
+                'profile counts twice. Gaps are where new measurements would help most.</div>', unsafe_allow_html=True)
 with d:
     ui.panel_title("Data quality: what still needs checking")
     flags = []
@@ -162,6 +171,8 @@ with d:
             "bad depth": "Depth below zero (LM04-1, -0.04 m); kept and flagged.",
             "method blank in source": "Method not stated (MM09-2); not called measured.",
             "off the island": "Site lies outside the agglomeration limits (plus 250 m); hidden unless you include off-island sites.",
+            "Rougemont area but on the island": "Named in the Rougemont area, but its coordinates in the source fall "
+                                                "on the island (ROU); kept as given, check with the source.",
         }).fillna("")
         st.markdown("".join(
             f'<div class="gx-status"><div class="i todo">!</div><div><div class="t">{html.escape(r.flag)} · '

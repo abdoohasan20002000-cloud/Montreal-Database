@@ -32,8 +32,8 @@ ui.kpis([
     (f"{with_data} of {len(names)}", "Regions with data", "boroughs and linked cities", ui.CATEGORICAL[0]),
     (f"{len(with_vs):,}", "Sites with measured Vs30", f"{on_island} on the island, {len(with_vs) - on_island} off it",
      ui.VS_COLOUR),
-    (f"{len(bh):,}" if not bh.empty else "not loaded", "Archive boreholes",
-     f"{int((bh['data_era'] == 'pre-1960').sum()):,} pre-1960" if not bh.empty else "6,961 expected, 1927–2009",
+    (f"{len(bh):,}" if not bh.empty else "–", "Archive boreholes",
+     f"{int((bh['data_era'] == 'pre-1960').sum()):,} pre-1960" if not bh.empty else "not loaded; 6,961 expected",
      ui.ERA_COLOURS["1960 and later"]),
     (f"{len(pending)}", "Waiting for review", "submitted, not yet approved", ui.UPLOAD_COLOUR),
 ], cols=5)
@@ -64,7 +64,7 @@ CARDS = [
     ("upload_file", "Contribute data", "Add what you have, from any year. It is checked at once and shown after a "
      "curator approves it.", "views/contribute.py"),
 ]
-for col, (icon, title, text, target) in zip(st.columns(len(CARDS), gap="small"), CARDS):
+for col, (icon, title, text, target) in zip(st.container(key="homecards").columns(len(CARDS), gap="small"), CARDS):
     with col, st.container(border=True, key=f"gxcard_{icon}"):
         st.markdown(f'<div class="gx-card-icon">{icon}</div><div class="gx-card-title">{html.escape(title)}</div>'
                     f'<div class="gx-card-text">{html.escape(text)}</div>', unsafe_allow_html=True)

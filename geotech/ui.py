@@ -1,5 +1,6 @@
 """Helpers shared by the Streamlit pages: colours, page style, headers, cards, maps and cached data."""
 import html
+from pathlib import Path
 
 import folium
 import streamlit as st
@@ -40,7 +41,6 @@ _CSS = """
     #f5f8fb; }
 .block-container { position:relative; z-index:1; padding-top:1.4rem; padding-bottom:3rem; max-width:1480px; }
 [data-testid="stHeader"] { background: transparent; }
-[data-testid="stDecoration"] { display:none; }
 h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
 
 /* sidebar: navigation as outlined buttons under small spaced-out section labels */
@@ -56,7 +56,7 @@ h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
 [data-testid="stSidebarNavLink"]:hover { border-color:var(--accent); background:#ecf8fb; }
 [data-testid="stSidebarNavLink"] p { font-size:0.97rem; font-weight:500; color:var(--ink); }
 [data-testid="stSidebarNavLink"] [data-testid="stIconMaterial"] { color:var(--accent-dark) !important; }
-[data-testid="stSidebarNavLink"][aria-current="page"] { background:linear-gradient(135deg, #0e7490, #0891b2);
+[data-testid="stSidebarNavLink"][aria-current="page"] { background:linear-gradient(135deg, #0e7490, #0b7c98);
   border-color:#0e7490; box-shadow:0 8px 22px rgba(8,145,178,0.28); }
 [data-testid="stSidebarNavLink"][aria-current="page"] p,
 [data-testid="stSidebarNavLink"][aria-current="page"] [data-testid="stIconMaterial"] { color:#ffffff !important; font-weight:600; }
@@ -84,7 +84,9 @@ h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
   text-transform:uppercase; color:var(--accent-dark); margin-bottom:10px; font-weight:500; }
 .gx-hero h1 { font-family:"Space Grotesk", sans-serif; color:var(--ink); font-weight:700; font-size:2.1rem; line-height:1.1;
   margin:0 0 10px 0; padding:0; }
-.gx-hero.lg h1 { font-size:3.3rem; margin-bottom:24px; }
+.gx-hero.lg h1 { font-size:clamp(2rem, 7vw, 3.3rem); margin-bottom:24px; overflow-wrap:normal; hyphens:manual; }
+@media (max-width: 640px) { .gx-hero.lg { padding:28px 20px 24px; min-height:0; } .gx-hero { padding:20px 18px; }
+  .gx-hero.lg p { font-size:1rem; } }
 .gx-hero p { color:#334155; margin:0; font-size:1rem; line-height:1.6; max-width:780px; }
 .gx-hero.lg p { font-size:1.16rem; max-width:720px; }
 .gx-rule { width:150px; height:3px; border-radius:3px; margin:18px 0 14px;
@@ -101,6 +103,15 @@ h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
 [data-testid="stButtonGroup"] > [role="radiogroup"], [data-testid="stButtonGroup"] > [role="toolbar"] {
   flex-wrap:wrap; overflow:visible; gap:4px; }
 [data-testid="stButtonGroup"] button[data-variant="segmented_control"] { border-radius:10px; }
+
+/* home cards wrap onto more rows rather than squeezing below a readable width */
+.st-key-homecards [data-testid="stHorizontalBlock"] { flex-wrap:wrap; row-gap:12px; }
+.st-key-homecards [data-testid="stColumn"] { min-width:200px; }
+
+/* the four soil panels on Insights go two by two when four would be too narrow to read */
+@media (max-width: 1250px) {
+  .st-key-soilpanels [data-testid="stHorizontalBlock"] { flex-wrap:wrap; row-gap:12px; }
+  .st-key-soilpanels [data-testid="stColumn"] { min-width:calc(50%% - 1rem); } }
 
 /* KPI cards: label, big number, one line of context */
 .gx-kpis { display:grid; grid-template-columns:repeat(auto-fit,
@@ -128,7 +139,11 @@ h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
   background:#ecf8fb; border:1px solid #c5e4ec; color:var(--accent-dark); font-size:1.25rem; margin-bottom:10px;
   font-family:"Material Symbols Rounded"; }
 .gx-card-title { font-family:"Space Grotesk", sans-serif; font-weight:600; font-size:1.12rem; color:var(--ink); }
-.gx-card-text { color:var(--ink2); font-size:0.88rem; line-height:1.5; min-height:8.6em; padding-bottom:10px; margin-top:4px; }
+.gx-card-text { color:var(--ink2); font-size:0.88rem; line-height:1.5; padding-bottom:10px; margin-top:4px; }
+.gx-card-title, .gx-card-text { overflow-wrap:normal; word-break:normal; hyphens:auto; }
+[data-testid="stColumn"]:has(> div > [class*="st-key-gxcard"]) > div,
+[data-testid="stColumn"]:has(> div > [class*="st-key-gxcard"]) [class*="st-key-gxcard"] { height:100%%; }
+[class*="st-key-gxcard"] [data-testid="stElementContainer"]:has([data-testid="stPageLink"]) { margin-top:auto; }
 .gx-status { display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-bottom:1px solid #e8eef3; }
 .gx-status:last-child { border-bottom:none; }
 .gx-status .i { width:22px; height:22px; flex:none; border-radius:50%%; display:flex; align-items:center;
@@ -149,8 +164,8 @@ h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
 .gx-step { display:flex; gap:14px; }
 .gx-step .num { flex:none; width:34px; height:34px; border-radius:50%%; display:flex; align-items:center;
   justify-content:center; font-family:"Space Grotesk", sans-serif; font-weight:700; color:#ffffff;
-  background:linear-gradient(135deg, #0e7490, #0891b2); }
-.gx-step ul { margin:6px 0 0 0; padding-left:18px; color:#334155; }
+  background:linear-gradient(135deg, #0e7490, #0b7c98); }
+.gx-step ul { margin:6px 0 12px 0; padding-left:18px; color:#334155; }
 
 /* panels and notes */
 .gx-panel-title { font-family:"JetBrains Mono", ui-monospace, monospace; font-size:0.7rem; letter-spacing:0.18em;
@@ -173,9 +188,9 @@ h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
 iframe[title="streamlit_folium.st_folium"] { border-radius:16px; border:1px solid var(--line);
   box-shadow:0 6px 20px rgba(15,27,45,0.06); }
 [data-testid="stDeckGlJsonChart"] { border-radius:16px; overflow:hidden; border:1px solid var(--line); }
-.stTabs [data-baseweb="tab-list"] { gap:6px; border-bottom:1px solid var(--line); }
-.stTabs [data-baseweb="tab"] { padding:8px 14px; font-weight:500; }
-button[kind="primary"], [data-testid="stBaseButton-primary"] { background:linear-gradient(135deg, #0e7490, #0891b2) !important;
+[data-testid="stTabs"] [role="tablist"] { gap:6px; border-bottom:1px solid var(--line); }
+[data-testid="stTab"] { padding:8px 14px; font-weight:500; }
+button[kind="primary"], [data-testid="stBaseButton-primary"] { background:linear-gradient(135deg, #0e7490, #0b7c98) !important;
   border-color:#0e7490 !important; color:#ffffff !important; font-weight:600; }
 [data-testid="stPageLink"] a { border:1px solid #c5e4ec; border-radius:10px; padding:4px 12px; justify-content:center;
   background:#f8fbfc; }
@@ -185,7 +200,8 @@ button[kind="primary"], [data-testid="stBaseButton-primary"] { background:linear
 
 LEAFLET_CSS = """
 <style>
-.leaflet-container { font-family:Inter, system-ui, sans-serif; }
+.leaflet-container { font-family:Inter, system-ui, sans-serif; font-size:12px; }
+.leaflet-container .leaflet-control-attribution, .leaflet-container .leaflet-control-scale-line { font-size:11px; }
 .leaflet-tooltip { border-radius:8px; border:1px solid #dbe4ec; box-shadow:0 6px 18px rgba(15,27,45,0.15); color:#0f1b2d; }
 .leaflet-control-layers, .leaflet-bar { border-radius:10px !important; }
 </style>
@@ -252,11 +268,16 @@ def kpis(items, cols=2):
     st.markdown(f'<div class="gx-kpis" style="--cols:{int(cols)}">{cards}</div>', unsafe_allow_html=True)
 
 
-def _text_on(hex_colour):
+def _lum(hex_colour):
     h = hex_colour.lstrip("#")
     r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
-    lum = sum(w * (v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4) for w, v in zip((0.2126, 0.7152, 0.0722), (r, g, b)))
-    return INK if lum > 0.32 else "#ffffff"
+    return sum(w * (v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4) for w, v in zip((0.2126, 0.7152, 0.0722), (r, g, b)))
+
+
+def _text_on(hex_colour):
+    """Ink or white, whichever contrasts more with the background colour."""
+    lum = _lum(hex_colour)
+    return INK if (lum + 0.05) / (_lum(INK) + 0.05) >= 1.05 / (lum + 0.05) else "#ffffff"
 
 
 def class_tags(suffix=""):
@@ -323,7 +344,7 @@ def status_rows(items):
 # ---- maps --------------------------------------------------------------------------------
 def base_map(location=(45.55, -73.66), zoom=11, layers=("Light", "Streets", "Satellite", "Topographic (relief)")):
     """A folium map on a light basemap, with the other basemaps one click away."""
-    m = folium.Map(location=list(location), zoom_start=zoom, tiles=None, control_scale=True)
+    m = folium.Map(location=list(location), zoom_start=zoom, tiles=None, control_scale=True, font_size="12px")
     for i, name in enumerate(layers):
         url, attr, max_zoom = TILES[name]
         folium.TileLayer(url, name=name, attr=attr, max_zoom=max_zoom, show=i == 0).add_to(m)
@@ -350,6 +371,20 @@ def add_regions(m, selected=(), show=True, interactive=True):
             "tooltip": folium.GeoJsonTooltip(fields=["region", "kind"], aliases=["", ""], labels=False)}
            if interactive else {}),
     ).add_to(m)
+
+
+def safe_tip(text):
+    """Text for a folium tooltip or popup. Folium pastes it into a JavaScript template literal unescaped, so
+    contributor text is escaped as HTML and the characters that would end or alter that literal are encoded."""
+    return (html.escape(str(text)).replace("`", "&#96;").replace("$", "&#36;").replace("\\", "&#92;"))
+
+
+def class_chips_html(classes="ABCDE"):
+    """Small A to E swatches in the class colours, for a compact key under a chart or on a map."""
+    return '<span style="display:inline-flex;gap:3px;vertical-align:middle">' + "".join(
+        f'<span title="Class {k}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;'
+        f'height:15px;background:{SITE_CLASS_COLOURS[k]};color:{_text_on(SITE_CLASS_COLOURS[k])};font-size:10px;'
+        f'font-weight:700;border-radius:3px">{k}</span>' for k in classes) + "</span>"
 
 
 def pin_icon(colour, size=16):
@@ -381,14 +416,30 @@ def get_store():
     return storage.get_store(secrets())
 
 
+def _stamp(*paths):
+    """Cache key part that changes when a data file or the loading code changes, so a redeploy that only updates
+    data/ or geotech/data.py never serves stale tables."""
+    files = list(paths) + [Path(data.__file__), Path(geo.__file__)]
+    return tuple((str(f), f.stat().st_mtime_ns if f.exists() else 0) for f in files)
+
+
 @st.cache_data(show_spinner="Loading the borehole archive…")
-def load_archive(use_demo):
+def _load_archive(use_demo, stamp):
     return data.load_archive(use_demo)
 
 
+def load_archive(use_demo):
+    return _load_archive(use_demo, _stamp(config.BOREHOLES_CSV, config.SAMPLES_CSV, config.DEMO_BOREHOLES_CSV,
+                                          config.DEMO_SAMPLES_CSV))
+
+
 @st.cache_data
-def load_vs():
+def _load_vs(stamp):
     return data.load_vs()
+
+
+def load_vs():
+    return _load_vs(_stamp(config.VS30_SITES_CSV, config.VS_PROFILES_CSV, config.REGIONS_GEOJSON))
 
 
 def region_names():

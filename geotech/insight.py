@@ -63,10 +63,14 @@ def nbcc_class(vs30):
 CLASS_WORDS = {"A": "hard rock", "B": "rock", "C": "very dense soil or soft rock", "D": "stiff soil", "E": "soft soil"}
 
 
+def _sites(n, words=""):
+    return f"{n} {words + ' ' if words else ''}site{'' if n == 1 else 's'}"
+
+
 def summary(lat, lon, radius_m, near, est, n_used, n_prof_rows, n_prof_sites, bh_near, on_island, region=""):
     """A short plain-language paragraph for a site report."""
     parts = []
-    place = f" in {region}" if region and on_island else ""
+    place = f" in {region}" if region and on_island and region != config.OFF_ISLAND else ""
     where = f"Around {lat:.5f}, {lon:.5f}{place}" + ("" if on_island else " (outside the island)")
     if near.empty:
         parts.append(f"{where} there is no measured Vs30 within {radius_m / 1000:.1f} km. "
@@ -83,7 +87,7 @@ def summary(lat, lon, radius_m, near, est, n_used, n_prof_rows, n_prof_sites, bh
         if est is not None:
             c = nbcc_class(est)
             spread = near.head(n_used)["vs30_ms"]
-            parts.append(f"Weighting the {n_used} nearest measured sites by distance gives about {est:.0f} m/s "
+            parts.append(f"Weighting the {_sites(n_used, 'nearest measured')} by distance gives about {est:.0f} m/s "
                          f"(range of those sites {spread.min():.0f}–{spread.max():.0f} m/s). This is an "
                          f"INTERPOLATED value, not a measurement; it would fall in NBCC class {c} "
                          f"({CLASS_WORDS.get(c, '')}).")
@@ -119,6 +123,6 @@ def report_table(lat, lon, x, y, radius_m, near, est, n_used, region=""):
         rows.append({"item": "Vs30 at this location", "value": f"{est:.0f} m/s", "status": "interpolated",
                      "method": f"{IDW_METHOD}; {n_used} sites; radius {radius_m:.0f} m", "source": "sites above",
                      "date": today})
-        rows.append({"item": "NBCC site class at this location", "value": nbcc_class(est), "status": "derived",
+        rows.append({"item": "NBCC site class at this location", "value": nbcc_class(est), "status": "interpolated",
                      "method": "NBCC Vs30 limits applied to the interpolated Vs30", "source": "", "date": today})
     return pd.DataFrame(rows)

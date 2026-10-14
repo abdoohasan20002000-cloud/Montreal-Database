@@ -100,12 +100,22 @@ def region_of(x, y):
         hit = todo & shapely.contains_xy(g, x, y)
         out[hit] = name
         todo &= ~hit
+    # Points on the shore band the island check accepts (within SHORE_TOLERANCE_M) take the nearest region,
+    # so a point is never "on the island" and "off the island" at once.
+    for i in np.flatnonzero(todo):
+        pt = Point(x[i], y[i])
+        d, name = min((g.distance(pt), n) for n, _, g in regions())
+        if d <= config.SHORE_TOLERANCE_M:
+            out[i] = name
     return out
 
 
 def regions_touching(geom_mtm8):
     """Names of the regions a footprint (point, line or area, MTM 8) touches; config.OFF_ISLAND if none."""
     names = [n for n, _, g in regions() if g.intersects(geom_mtm8)]
+    if not names and regions():  # on the shore band: the regions within the island check's tolerance
+        near = geom_mtm8.buffer(config.SHORE_TOLERANCE_M)
+        names = [n for n, _, g in regions() if g.intersects(near)]
     return names or ([config.OFF_ISLAND] if regions() else [])
 
 

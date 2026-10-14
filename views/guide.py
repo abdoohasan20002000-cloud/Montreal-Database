@@ -1,6 +1,7 @@
 """User guide: how to use each page, and how to read the data."""
 import html
 
+import pandas as pd
 import streamlit as st
 
 from geotech import config, ui
@@ -49,11 +50,10 @@ STEPS = [
 with how:
     for i, (title, target, tips) in enumerate(STEPS, 1):
         with st.container(border=True):
-            left, right = st.columns([5, 1], vertical_alignment="center")
-            left.markdown(f'<div class="gx-step"><div class="num">{i}</div><div><div class="gx-card-title">'
-                          f'{html.escape(title)}</div><ul>'
-                          + "".join(f"<li>{t}</li>" for t in tips) + "</ul></div></div>", unsafe_allow_html=True)
-            right.page_link(target, label="Open", icon=":material/arrow_forward:", width="stretch")
+            st.markdown(f'<div class="gx-step"><div class="num">{i}</div><div><div class="gx-card-title">'
+                        f'{html.escape(title)}</div><ul>'
+                        + "".join(f"<li>{t}</li>" for t in tips) + "</ul></div></div>", unsafe_allow_html=True)
+            st.page_link(target, label=f"Open {title}", icon=":material/arrow_forward:")
 
 with share:
     a, b = st.columns([1.5, 1], gap="large")
@@ -85,11 +85,25 @@ project's GitHub repository, are rebuilt by scripts, and can be proposed there a
         st.markdown("".join(f'<span class="gx-chip" style="display:inline-block;margin:0 6px 6px 0">'
                             f'{html.escape(t)}</span>' for t in config.DATA_TYPES), unsafe_allow_html=True)
 
+bh, samples, _ = ui.load_archive(False)
+vs_sites, vs_prof = ui.load_vs()
+if bh.empty:
+    archive_text = ("Expected: 6,961 boreholes and 39,285 SPT samples, 1927–2009 (not loaded in this deployment yet), "
+                    "compiled from")
+else:
+    yrs = pd.to_numeric(bh.get("year"), errors="coerce").dropna()
+    archive_text = (f"{len(bh):,} boreholes and {len(samples):,} SPT samples"
+                    + (f", {int(yrs.min())}–{int(yrs.max())}" if len(yrs) else "") + ", compiled from")
+status = vs_prof["vs_status"].fillna("").str.split(" ").str[0].value_counts() if not vs_prof.empty else pd.Series()
+n_meas, n_der = int(status.get("measured", 0)), int(status.get("derived", 0))
+n_other = len(vs_prof) - n_meas - n_der
+other_text = f", plus {n_other} with no method stated" if n_other else ""
+n_with_vs30 = int(vs_sites["vs30_ms"].notna().sum()) if not vs_sites.empty else 0
 with read:
     a, b = st.columns([1.5, 1], gap="large")
     with a:
-        st.markdown("""
-**Borehole archive.** 6,961 boreholes and 39,285 SPT samples, 1927–2009, compiled from the
+        st.markdown(f"""
+**Borehole archive.** {archive_text} the
 City of Montréal, the Ministère des Transports (MTQ) and the Ministère de l'Environnement (MELCC).
 
 **Coordinates.** Stored in MTM zone 8 (EPSG:32188), metres. The map shows a WGS84 copy;
@@ -102,9 +116,10 @@ downloads carry both, with MTM 8 as the reference.
   (Rosset et al. 2023), not measured. `vs30_status` says so on every row.
 - Every contributed file states whether its values are measured, derived, interpolated or estimated.
 
-**Measured Vs (Rosset compilation).** 159 sites, 149 of them with a Vs30 from field seismic surveys
-(landstreamer/MASW lines, downhole tests), and 2,273 Vs-depth rows. These are the only **measured** Vs values here. Downhole Vs is measured;
-MASW and minivib profiles are derived (inversion, travel times), and `vs_status` says which. Sites outside the
+**Measured Vs (Rosset compilation).** {len(vs_sites)} sites, {n_with_vs30} of them with
+a Vs30 from a seismic survey at the site (mostly landstreamer and MASW lines, some downhole tests). Unlike the
+archive's Vs30, these come from field tests. The {len(vs_prof):,} Vs-depth rows are {n_meas:,} **measured**
+(downhole) and {n_der:,} **derived** (MASW inversion, minivib travel times){other_text}; `vs_status` says which. Sites outside the
 agglomeration (the LM, PL and VM lines in Laval and on the South Shore, and the Rougemont area) are in the files
 but hidden until you tick the box. Profiles with no location in the source (for example MM05, MM11 to MM20, MP11)
 are only in the whole-island selection.

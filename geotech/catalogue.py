@@ -55,11 +55,14 @@ def builtin(sites, prof, reg, bh, samples):
     out.append(_entry(
         key="vs_regressions", title="Vs-depth regressions by soil", data_type="Shear-wave velocity (Vs, Vs30)",
         origin="Built in", source="Rosset et al. (2023)", year_from=None, year_to=None,
-        years_note="not stated", regions=[], records=f"{len(reg)} fitted curves" if not reg.empty else "none",
-        value_status="Derived", licence="Not stated (ask the source)", access="Public", available=not reg.empty,
-        description="Published Vs = a + b·z^c fits for sand, clay and other soils; they describe the whole island "
-                    "rather than one place.",
-        method="Sheet 04_REGRESSION_FITS of the Rosset workbook; coefficients match the published Table 3"))
+        years_note="not stated", regions=[], value_status="Derived", licence="Not stated (ask the source)",
+        records=(f"{reg['fit'].nunique()} fits: 2 published (sand, clay), {reg['fit'].nunique() - 2} minivib line fits"
+                 if not reg.empty else "none"), access="Public", available=not reg.empty,
+        description="The published Rosset fits for sand and clay (Vs = a + b·z^c; the form is inferred, the workbook "
+                    "does not state it) and minivib line fits (form stated for 2, not stated for 4). They describe "
+                    "the whole island rather than one place.",
+        method="Sheet 04_REGRESSION_FITS of the Rosset workbook; sand and clay coefficients match the published "
+               "Table 3, the line fits are not checked against a publication"))
     gj = geo.regions_geojson()
     if gj:
         props = [f["properties"] for f in gj["features"]]

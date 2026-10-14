@@ -4,7 +4,7 @@ import streamlit as st
 from geotech import ui
 
 st.set_page_config(page_title="Montréal Geotechnical Atlas", page_icon="🪨", layout="wide",
-                   initial_sidebar_state="expanded")
+                   initial_sidebar_state="auto")
 ui.apply_style()
 
 pages = {

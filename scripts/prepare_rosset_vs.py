@@ -47,6 +47,8 @@ s["vs30_status"] = s["vs30_ms"].map(lambda v: "measured (field seismic survey)" 
 s["qa_flags"] = ""
 s.loc[~s["on_island"], "qa_flags"] += "off the island;"
 s.loc[s["vs30_ms"].isna(), "qa_flags"] += "no Vs30;"
+# The other Rougemont-area sites lie far east of the island; one with island coordinates is kept as given but flagged.
+s.loc[s["area"].astype(str).str.startswith("Rougemont") & s["on_island"], "qa_flags"] += "Rougemont area but on the island;"
 out_range = s["vs30_ms"].notna() & ~s["vs30_ms"].between(config.VS30_MIN, config.VS30_MAX)
 s.loc[out_range, "qa_flags"] += f"Vs30 outside {config.VS30_MIN}-{config.VS30_MAX};"
 s["source"] = SOURCE

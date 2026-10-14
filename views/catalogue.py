@@ -97,7 +97,7 @@ if regions:  # how much of each dataset lies in the chosen regions
 pick = st.dataframe(
     view[cols],
     hide_index=True, width="stretch", height=min(40 + 35 * len(view), 460), on_select="rerun",
-    selection_mode="single-row", key="cat_table",
+    selection_mode="single-row", key="cat_table_" + str(abs(hash(tuple(view["key"])))),  # new list, fresh selection
     column_config={"title": st.column_config.TextColumn("Dataset", width="medium", pinned=True),
                    "data_type": "Type", "where": "Where", "here": "In chosen regions", "years": "Years",
                    "records": "Records (all)" if regions else "Records",
@@ -105,8 +105,11 @@ pick = st.dataframe(
 st.markdown('<div class="gx-note">Click a row for its details and downloads. <b>Where</b> lists the boroughs and '
             'cities a dataset touches, found from its coordinates.</div>', unsafe_allow_html=True)
 
-rows = pick.selection.rows if pick and pick.selection else []
-entry = view.iloc[rows[0]] if rows else view.iloc[0]
+# Remember the picked dataset, not its row number: a filter change can shorten the table under a stale selection.
+rows = [i for i in (pick.selection.rows if pick and pick.selection else []) if i < len(view)]
+if rows:
+    state["cat_pick"] = view.iloc[rows[0]]["key"]
+entry = view[view["key"] == state["cat_pick"]].iloc[0] if state.get("cat_pick") in set(view["key"]) else view.iloc[0]
 
 
 def frame_csv(df):
