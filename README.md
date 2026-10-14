@@ -23,9 +23,10 @@ download it with its source, and contribute what they have.
   value carries status, method, source and date; download as Markdown or CSV.
 - **Contribute data**: place the data on the map (click, line, area, coordinates in MTM 8 or lat/long, or an
   existing hole ID), describe it once (title, one of 17 data types, years collected, source, value status, licence,
-  who may download it, notes), and add one or more files of any format. Checks run at once on every file:
-  duplicates, location on the island, file opens, and for tables hole IDs, coordinates, depths, refusals coded as
-  999, Vs30 range and pre-1960 dates. A submission is all or nothing.
+  who may download it, notes), and add one or more files of any format, up to 50 MB each (the most a free Supabase
+  project accepts). Checks run at once on every file: duplicates, location on the island, file opens, and for tables
+  (CSV, Excel .xlsx or .xls; the first 200,000 rows) hole IDs, coordinates, depths, refusals coded as 999, Vs30 range
+  and pre-1960 dates. A submission is all or nothing.
 - **Curate**: a curator reads each file's check report and approves or rejects it. Only approved data is shown.
 - **User guide**: getting started, sharing and contributing, how to read the data, sources and rebuilding.
 

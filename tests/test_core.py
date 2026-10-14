@@ -1,4 +1,6 @@
+import numpy as np
 import pandas as pd
+import pytest
 from shapely.geometry import Point
 
 from geotech import data, geo, validate
@@ -163,3 +165,72 @@ def test_shore_band_points_take_the_nearest_region():
     x, y = geo.wgs84_to_mtm8(-73.70307, 45.54655)  # inside the island check's 250 m tolerance, outside every region
     assert geo.on_island(x, y)
     assert geo.region_of(x, y)[0] == geo.regions_touching(Point(x, y))[0] != "Off the island"
+
+
+def test_french_csv_decimal_commas_are_read_as_numbers():
+    # pandas 3 reads text columns as its own string type, not object; both must be converted.
+    x, y = geo.wgs84_to_mtm8(-73.6, 45.5)
+    body = f"hole_id;x_mtm8;y_mtm8;depth_top_m;depth_bot_m\nA;{x:.2f};{y:.2f};1,5;0,5\n".replace(".", ",")
+    df = validate._read_table(body.encode(), "trous.csv")
+    assert df["depth_top_m"].tolist() == [1.5] and abs(df["x_mtm8"].iloc[0] - x) < 0.01
+    msgs = " ".join(m for _, m in validate.check_table(df))
+    assert "bottom not below top" in msgs and "All coordinates are on the island" in msgs
+
+
+def test_large_tables_are_checked_on_their_first_rows(monkeypatch):
+    monkeypatch.setattr(validate, "CHECK_ROWS", 5)
+    body = "hole_id,n_field\n" + "".join(f"H{i},{i}\n" for i in range(20))
+    rep = validate._check_content(body.encode(), "big.csv")
+    assert "first 5 rows" in rep[0][1]
+
+
+def test_island_check_on_many_points_matches_one_by_one():
+    pts = [geo.wgs84_to_mtm8(lon, lat) for lon, lat in [(-73.6, 45.5), (-72.0, 46.0), (-73.95, 45.45), (-73.5, 45.7)]]
+    xs, ys = zip(*pts)
+    assert geo.on_island_many(xs, ys).tolist() == [geo.on_island(x, y) for x, y in pts]
+
+
+def test_local_store_keeps_every_record_when_written_at_once(tmp_path):
+    import threading
+    store = LocalStore(tmp_path)
+    assert store.temporary
+    threads = [threading.Thread(target=store.add, args=({"id": f"u{i}", "file_name": "a.txt", "status": "pending"}, b"x"))
+               for i in range(20)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(r["id"] for r in store.list()) == sorted(f"u{i}" for i in range(20))
+
+
+def test_supabase_store_is_marked_permanent():
+    try:
+        from supabase import create_client  # noqa: F401  (the repo's supabase/ folder alone does not count)
+    except ImportError:
+        pytest.skip("supabase is not installed")
+    from geotech.storage import SupabaseStore
+    store = SupabaseStore("https://example.supabase.co", "aaa.bbb.ccc")
+    assert store.temporary is False and store.bucket == "uploads"
+
+
+def test_terrain_retries_a_tile_that_failed(monkeypatch):
+    from geotech import terrain
+    calls = []
+
+    def flaky(z, x, y):
+        calls.append((z, x, y))
+        if len(calls) == 1:
+            raise OSError("timed out")
+        return np.full((256, 256), 42.0)
+    monkeypatch.setattr(terrain, "_read_tile", flaky)
+    monkeypatch.setattr(terrain, "_failed_at", {})
+    assert np.isnan(terrain.elevation(-73.6, 45.5)[0])
+    assert np.isnan(terrain.elevation(-73.6, 45.5)[0]) and len(calls) == 1  # not retried at once
+    monkeypatch.setattr(terrain, "RETRY_AFTER_S", 0)
+    assert terrain.elevation(-73.6, 45.5)[0] == 42.0
+
+
+def test_today_is_montreal_date():
+    from datetime import datetime, timezone
+    from geotech import config
+    assert config.today() == datetime.now(timezone.utc).astimezone(config.TIMEZONE).date()

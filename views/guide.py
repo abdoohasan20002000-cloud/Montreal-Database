@@ -44,7 +44,8 @@ STEPS = [
         "Place it on the map: click a point, draw a line or an area, type coordinates or give an existing hole ID. "
         "The region is found from the location.",
         "Describe it once: data type, the years it was collected, source, whether values are measured, derived, "
-        "interpolated or estimated, licence and who may download it. Then add one or more files of any format.",
+        "interpolated or estimated, licence and who may download it. Then add one or more files of any format, "
+        "up to 50 MB each; for a larger file, put a link to it in the notes.",
         "Automatic checks run at once; a curator reviews the report before the data appears in the catalogue."]),
 ]
 with how:

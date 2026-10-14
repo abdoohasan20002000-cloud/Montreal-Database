@@ -1,5 +1,6 @@
 """Helpers shared by the Streamlit pages: colours, page style, headers, cards, maps and cached data."""
 import html
+import mimetypes
 from pathlib import Path
 
 import folium
@@ -411,19 +412,28 @@ def secrets():
         return {}
 
 
-@st.cache_resource
-def get_store():
+@st.cache_resource(max_entries=1, show_spinner=False)
+def _store(code_stamp):
     return storage.get_store(secrets())
+
+
+def get_store():
+    """The shared store for contributed files. It is built again when storage.py changes, so after a live update the
+    pages never call an object made from the old code."""
+    return _store(_stamp(Path(storage.__file__)))
 
 
 def _stamp(*paths):
     """Cache key part that changes when a data file or the loading code changes, so a redeploy that only updates
-    data/ or geotech/data.py never serves stale tables."""
-    files = list(paths) + [Path(data.__file__), Path(geo.__file__)]
+    data/ or geotech/data.py never serves stale tables. The region limits and the island outline are always in it,
+    since every table gets its region and island flag from them."""
+    files = list(paths) + [Path(data.__file__), Path(geo.__file__), Path(config.__file__), config.REGIONS_GEOJSON,
+                           config.ISLAND_OUTLINE]
     return tuple((str(f), f.stat().st_mtime_ns if f.exists() else 0) for f in files)
 
 
-@st.cache_data(show_spinner="Loading the borehole archive…")
+# A few entries each: the stamp changes with every update, and older copies would otherwise stay in memory.
+@st.cache_data(show_spinner="Loading the borehole archive…", max_entries=4)
 def _load_archive(use_demo, stamp):
     return data.load_archive(use_demo)
 
@@ -433,13 +443,13 @@ def load_archive(use_demo):
                                           config.DEMO_SAMPLES_CSV))
 
 
-@st.cache_data
+@st.cache_data(max_entries=2)
 def _load_vs(stamp):
     return data.load_vs()
 
 
 def load_vs():
-    return _load_vs(_stamp(config.VS30_SITES_CSV, config.VS_PROFILES_CSV, config.REGIONS_GEOJSON))
+    return _load_vs(_stamp(config.VS30_SITES_CSV, config.VS_PROFILES_CSV))
 
 
 def region_names():
@@ -455,7 +465,12 @@ def archive_banner(label):
                  "Add data/boreholes.csv and data/spt_samples.csv to show the archive.")
 
 
+def mime_of(record):
+    """The file's media type for its download button (files are fetched only when the button is pressed)."""
+    return record.get("mime") or mimetypes.guess_type(record.get("file_name") or "")[0] or "application/octet-stream"
+
+
 def storage_banner(store):
-    if isinstance(store, storage.LocalStore):
+    if store.temporary:
         st.info("Uploads are kept in a temporary local folder and are lost when the app restarts. "
                 "Add Supabase settings to the app's secrets for permanent shared storage.")

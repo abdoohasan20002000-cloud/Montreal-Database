@@ -43,15 +43,24 @@ def island_shape_mtm8():
         # Outline files from the portal package are WGS84; a file already in metres is used as is.
         if outline.bounds[0] > -180 and outline.bounds[2] < 180:
             outline = geom_wgs84_to_mtm8(outline)
-        return outline.buffer(config.SHORE_TOLERANCE_M), "island outline + 250 m"
-    b = config.ISLAND_BBOX
-    rough = geom_wgs84_to_mtm8(box(b["lon_min"], b["lat_min"], b["lon_max"], b["lat_max"]))
-    return rough, "rough island box (add data/island_outline.geojson for the precise check)"
+        shp, how = outline.buffer(config.SHORE_TOLERANCE_M), "island outline + 250 m"
+    else:
+        b = config.ISLAND_BBOX
+        shp = geom_wgs84_to_mtm8(box(b["lon_min"], b["lat_min"], b["lon_max"], b["lat_max"]))
+        how = "rough island box (add data/island_outline.geojson for the precise check)"
+    shapely.prepare(shp)  # many points are tested against it
+    return shp, how
 
 
 def on_island(x_mtm8, y_mtm8):
     shp, _ = island_shape_mtm8()
     return shp.contains(Point(x_mtm8, y_mtm8))
+
+
+def on_island_many(x_mtm8, y_mtm8):
+    """on_island for arrays of coordinates, all at once."""
+    shp, _ = island_shape_mtm8()
+    return shapely.contains_xy(shp, np.asarray(x_mtm8, dtype=float), np.asarray(y_mtm8, dtype=float))
 
 
 # ---- regions -------------------------------------------------------------------------------

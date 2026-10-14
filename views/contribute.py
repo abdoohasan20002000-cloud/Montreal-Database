@@ -102,7 +102,8 @@ with st.form("upload"):
                                      "until sign-in is set up; a curator can share them on request.")
     uploaded_by = c1.text_input("Your name and organisation *")
     notes = c2.text_area("Notes (method, equipment, datum, anything a user should know)")
-    files = st.file_uploader("Files * (one or more; any format)", accept_multiple_files=True)
+    files = st.file_uploader("Files * (one or more; any format)", accept_multiple_files=True,
+                             help="Up to 50 MB each. For a larger file, put a link to it in the notes.")
     submitted = st.form_submit_button("Check and submit", type="primary", icon=":material/task_alt:")
 
 if submitted:

@@ -1,5 +1,7 @@
 """Settings shared by every page. Change column names here, not in the pages."""
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
@@ -74,3 +76,11 @@ LICENCES = ["CC BY 4.0", "Open Government Licence – Québec", "Restricted, no 
             "Other (see notes)"]
 ACCESS_LEVELS = ["Public", "Registered users", "Restricted"]
 SINCE_YEAR = 2001  # the "since 2001" preset in the catalogue year filter
+
+
+TIMEZONE = ZoneInfo("America/Montreal")
+
+
+def today():
+    """Today's date in Montréal. The server's clock is on UTC, which is already tomorrow from 20:00 EDT."""
+    return datetime.now(TIMEZONE).date()

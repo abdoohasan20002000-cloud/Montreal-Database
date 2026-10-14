@@ -1,7 +1,7 @@
 """Data catalogue: every dataset in the atlas, filtered by type, region and years, with its details and downloads."""
 import html
 import json
-from datetime import date
+from functools import partial
 
 import altair as alt
 import pandas as pd
@@ -25,7 +25,7 @@ uploads = store.list(status="approved")
 cat = catalogue.table(catalogue.builtin(sites, prof, reg, bh, samples) + catalogue.contributed(uploads))
 
 # ---- filters (one row above everything they filter) ------------------------------------------
-this_year = date.today().year
+this_year = config.today().year
 dated = pd.to_numeric(cat["year_from"], errors="coerce").dropna()
 y_min = int(min([config.SINCE_YEAR] + dated.tolist()))
 present = set(cat["data_type"])
@@ -113,10 +113,11 @@ entry = view[view["key"] == state["cat_pick"]].iloc[0] if state.get("cat_pick") 
 
 
 def frame_csv(df):
-    """CSV of a table, cut to the chosen regions when there are any."""
+    """CSV of a table, cut to the chosen regions when there are any, and its row count. The CSV is written only when
+    the button is pressed, not on every rerun."""
     if regions and "region" in df.columns:
         df = df[df["region"].isin(regions)]
-    return df.to_csv(index=False).encode("utf-8"), len(df)
+    return (lambda: df.to_csv(index=False).encode("utf-8")), len(df)
 
 
 st.write("")
@@ -150,7 +151,8 @@ with right:
                            icon=":material/download:", type="primary", width="stretch", key=f"dl_{k}")
     elif k == "samples":
         holes = bh if not regions else bh[bh["region"].isin(regions)]
-        body = samples[samples["hole_id"].isin(holes["hole_id"])].to_csv(index=False).encode("utf-8")
+        def body():
+            return samples[samples["hole_id"].isin(holes["hole_id"])].to_csv(index=False).encode("utf-8")
         st.download_button(f"Download CSV{suffix}", body, file_name="spt_samples.csv", mime="text/csv",
                            icon=":material/download:", type="primary", width="stretch", key="dl_samples")
     elif k == "regions":
@@ -166,9 +168,9 @@ with right:
     else:
         for r in entry["files"]:
             if ui.can_download(r):
-                st.download_button(f"{r['file_name']} · {(r.get('file_size') or 0) / 1e6:.2f} MB", store.get_bytes(r),
-                                   file_name=r["file_name"], icon=":material/download:", width="stretch",
-                                   key=f"dlf_{r['id']}")
+                st.download_button(f"{r['file_name']} · {(r.get('file_size') or 0) / 1e6:.2f} MB",
+                                   partial(store.get_bytes, r), file_name=r["file_name"], mime=ui.mime_of(r),
+                                   icon=":material/download:", width="stretch", key=f"dlf_{r['id']}")
             else:
                 st.caption(f"{r['file_name']}: access is {r.get('access_level')}; ask a curator for a copy.")
     if entry["available"] and k != "vs_regressions":

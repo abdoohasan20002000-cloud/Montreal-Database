@@ -31,5 +31,9 @@ toolbarMode = "minimal"
 showErrorDetails = true
 
 [server]
-maxUploadSize = 200
+# Megabytes per file: the most a free Supabase project accepts, and small enough to check in the app's memory.
+maxUploadSize = 50
 enableStaticServing = true
+# Map.py reloads the geotech modules itself, under one lock, when their files change. Streamlit's own reloader would
+# unload them from other visitors' runs at any moment, so it is told to leave that folder alone.
+folderWatchBlacklist = ["**/geotech"]

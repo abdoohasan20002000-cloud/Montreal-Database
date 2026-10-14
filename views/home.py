@@ -3,7 +3,7 @@ import html
 
 import streamlit as st
 
-from geotech import catalogue, config, geo, insight, storage, ui
+from geotech import catalogue, config, geo, insight, ui
 
 bh, samples, label = ui.load_archive(False)
 sites, prof = ui.load_vs()
@@ -86,8 +86,8 @@ with a:
         (not bh.empty, "Borehole archive",
          f"{len(bh):,} boreholes and {len(samples):,} SPT samples." if not bh.empty else
          "Not loaded yet. Add data/boreholes.csv and data/spt_samples.csv to the repository to show it."),
-        (not isinstance(store, storage.LocalStore), "Storage for contributed data",
-         "Permanent shared storage (Supabase)." if not isinstance(store, storage.LocalStore) else
+        (not store.temporary, "Storage for contributed data",
+         "Permanent shared storage (Supabase)." if not store.temporary else
          "Temporary: uploads are lost when the app restarts until Supabase settings are added."),
     ])
 with b:

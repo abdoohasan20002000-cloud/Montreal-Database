@@ -1,4 +1,6 @@
 """Curator page: read the check report, approve or reject pending uploads."""
+from functools import partial
+
 import streamlit as st
 
 from geotech import ui
@@ -35,7 +37,8 @@ for r in pending:
                 {"block": st.error, "warn": st.warning, "ok": st.success}[item["level"]](item["message"])
         with c2:
             st.map([{"lat": r["lat"], "lon": r["lon"]}], zoom=13, height=200)
-            st.download_button("Download to inspect", store.get_bytes(r), file_name=r["file_name"], key=f"get_{r['id']}")
+            st.download_button("Download to inspect", partial(store.get_bytes, r), file_name=r["file_name"],
+                               mime=ui.mime_of(r), key=f"get_{r['id']}")
             note = st.text_input("Review note", key=f"note_{r['id']}")
             a, b = st.columns(2)
             for col, verdict, text in ((a, "approved", "Approve"), (b, "rejected", "Reject")):

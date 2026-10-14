@@ -5,7 +5,9 @@ otherwise a local folder. Streamlit Community Cloud wipes local folders on every
 restart, so the local backend is for trying the app only.
 """
 import json
+import os
 import re
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,17 +31,21 @@ def safe_name(name):
 
 class LocalStore:
     kind = "local folder (temporary)"
+    temporary = True  # tested by the pages instead of the class, which a live update can replace
 
     def __init__(self, root: Path = LOCAL_DIR):
         self.root = root
         (root / "files").mkdir(parents=True, exist_ok=True)
         self.cat = root / "catalogue.json"
+        self._lock = threading.Lock()  # one store serves every visitor, so catalogue changes take turns
 
     def _all(self):
         return json.loads(self.cat.read_text(encoding="utf-8")) if self.cat.exists() else []
 
     def _save(self, rows):
-        self.cat.write_text(json.dumps(rows, indent=1, ensure_ascii=False), encoding="utf-8")
+        tmp = self.cat.with_suffix(".tmp")  # written whole, then swapped in, so a reader never sees half a file
+        tmp.write_text(json.dumps(rows, indent=1, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, self.cat)
 
     def list(self, status=None):
         rows = self._all()
@@ -51,21 +57,24 @@ class LocalStore:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
         record["storage_path"] = path
-        self._save(self._all() + [record])
+        with self._lock:
+            self._save(self._all() + [record])
 
     def get_bytes(self, record) -> bytes:
         return (self.root / "files" / record["storage_path"]).read_bytes()
 
     def update(self, upload_id, **fields):
-        rows = self._all()
-        for r in rows:
-            if r["id"] == upload_id:
-                r.update(fields)
-        self._save(rows)
+        with self._lock:
+            rows = self._all()
+            for r in rows:
+                if r["id"] == upload_id:
+                    r.update(fields)
+            self._save(rows)
 
 
 class SupabaseStore:
     kind = "Supabase"
+    temporary = False
 
     def __init__(self, url, key, bucket="uploads"):
         from supabase import create_client

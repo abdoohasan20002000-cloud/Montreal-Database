@@ -3,7 +3,6 @@
 Everything here is DERIVED or INTERPOLATED from the measured tables and is labelled so wherever it is shown.
 Nothing computed here is written back into the data files.
 """
-from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -106,7 +105,7 @@ def summary(lat, lon, radius_m, near, est, n_used, n_prof_rows, n_prof_sites, bh
 
 def report_table(lat, lon, x, y, radius_m, near, est, n_used, region=""):
     """One row per value in the report, with status, method, source and date."""
-    today = date.today().isoformat()
+    today = config.today().isoformat()
     rows = [{"item": "location (WGS84)", "value": f"{lat:.6f}, {lon:.6f}", "status": "input", "method": "picked by user",
              "source": "", "date": today},
             {"item": "location (MTM 8, EPSG:32188)", "value": f"{x:.1f} E, {y:.1f} N", "status": "derived",

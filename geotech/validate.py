@@ -6,10 +6,14 @@ Blocked uploads are not stored; warnings go to the curator with the file.
 import hashlib
 import io
 
+import numpy as np
 import pandas as pd
 
 from . import config, geo
 from .data import _normalise
+
+# Tables are checked on their first rows only, so one large upload cannot use up the app's memory.
+CHECK_ROWS = 200_000
 
 
 def sha256(data: bytes) -> str:
@@ -52,19 +56,23 @@ def _check_content(data, name):
             df = _read_table(data, name)
         except Exception as e:  # unreadable table
             return [("block", f"Table could not be read: {e}")]
-        return [("ok", f"Table read: {len(df)} rows, {len(df.columns)} columns.")] + check_table(df)
+        read = f"Table read: {len(df):,} rows, {len(df.columns)} columns."
+        if len(df) == CHECK_ROWS:
+            read = (f"Table read: {len(df.columns)} columns. It is large, so the checks below cover its first "
+                    f"{CHECK_ROWS:,} rows; the curator checks the rest.")
+        return [("ok", read)] + check_table(df)
     return [("ok", "Stored as an original file; contents not checked.")]
 
 
 def _read_table(data, name):
     if name.endswith((".xlsx", ".xls")):
-        return pd.read_excel(io.BytesIO(data))
-    text = data.decode("utf-8-sig", errors="replace")
-    sep = ";" if text.split("\n", 1)[0].count(";") > text.split("\n", 1)[0].count(",") else ","  # French Excel
-    df = pd.read_csv(io.StringIO(text), sep=sep)
+        return pd.read_excel(io.BytesIO(data), nrows=CHECK_ROWS)
+    first = data[:65536].split(b"\n", 1)[0].decode("utf-8-sig", errors="replace")
+    sep = ";" if first.count(";") > first.count(",") else ","  # French Excel
+    df = pd.read_csv(io.BytesIO(data), sep=sep, nrows=CHECK_ROWS, encoding="utf-8-sig", encoding_errors="replace")
     if sep == ";":
         for c in df.columns:  # decimal commas
-            if df[c].dtype == object:
+            if df[c].dtype == object or isinstance(df[c].dtype, pd.StringDtype):  # text columns in pandas 2 and 3
                 conv = pd.to_numeric(df[c].astype(str).str.replace(",", ".", regex=False), errors="coerce")
                 if conv.notna().sum() >= 0.9 * df[c].notna().sum() > 0:
                     df[c] = conv
@@ -86,15 +94,18 @@ def check_table(df):
 
     if {"x_mtm8", "y_mtm8"} <= set(df.columns):
         xy = df[["x_mtm8", "y_mtm8"]].apply(pd.to_numeric, errors="coerce")
+        x, y = xy["x_mtm8"].to_numpy(dtype=float), xy["y_mtm8"].to_numpy(dtype=float)
         bad_xy = xy.isna().any(axis=1)
-        off = [i for i, r in xy[~bad_xy].iterrows() if not geo.on_island(r.x_mtm8, r.y_mtm8)]
-        swapped = [i for i in off if geo.on_island(xy.at[i, "y_mtm8"], xy.at[i, "x_mtm8"])]
+        off = np.zeros(len(xy), dtype=bool)
+        off[~bad_xy.to_numpy()] = ~geo.on_island_many(x[~bad_xy.to_numpy()], y[~bad_xy.to_numpy()])
+        swapped = np.zeros(len(xy), dtype=bool)
+        swapped[off] = geo.on_island_many(y[off], x[off])
         if bad_xy.any():
             out.append(("warn", f"{int(bad_xy.sum())} rows have missing or unreadable coordinates."))
-        if off:
-            msg = f"{len(off)} rows are off the island (MTM 8)"
-            out.append(("warn", msg + (f"; {len(swapped)} look like X and Y swapped." if swapped else ".")))
-        if not off and not bad_xy.any():
+        if off.any():
+            msg = f"{int(off.sum())} rows are off the island (MTM 8)"
+            out.append(("warn", msg + (f"; {int(swapped.sum())} look like X and Y swapped." if swapped.any() else ".")))
+        if not off.any() and not bad_xy.any():
             out.append(("ok", "All coordinates are on the island (MTM 8)."))
 
     if has_depths:

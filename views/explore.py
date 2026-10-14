@@ -1,4 +1,6 @@
 """Explore: the map, a selection, what is in it, and one download."""
+from functools import partial
+
 import altair as alt
 import folium
 import numpy as np
@@ -419,6 +421,7 @@ with tf:
             if r.get("data_era") == "pre-1960":
                 st.warning("Pre-1960 work: SPT N read about half of modern values.")
             if ui.can_download(r):
-                st.download_button("Download this file", store.get_bytes(r), file_name=r["file_name"], key=f"dl_{r['id']}")
+                st.download_button("Download this file", partial(store.get_bytes, r), file_name=r["file_name"],
+                                   mime=ui.mime_of(r), key=f"dl_{r['id']}")
             else:
                 st.caption("Listed only: its access level is not Public. Ask a curator for a copy.")
