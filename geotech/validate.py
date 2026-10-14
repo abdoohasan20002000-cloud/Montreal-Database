@@ -60,10 +60,10 @@ def _check_content(data, name):
             df = _read_table(data, name)
         except Exception as e:  # unreadable table
             return [("block", f"Table could not be read: {e}")]
-        read = f"Table read: {len(df):,} rows, {len(df.columns)} columns."
+        read = f"Table read: {_n(len(df), 'row', 'rows')}, {_n(len(df.columns), 'column', 'columns')}."
         if len(df) > CHECK_ROWS:
             df = df.head(CHECK_ROWS)
-            read = (f"Table read: more than {CHECK_ROWS:,} rows, {len(df.columns)} columns. The checks below cover "
+            read = (f"Table read: more than {CHECK_ROWS:,} rows, {_n(len(df.columns), 'column', 'columns')}. The checks below cover "
                     f"its first {CHECK_ROWS:,} rows; the curator checks the rest.")
         return [("ok", read)] + check_table(df)
     return [("ok", "Stored as an original file; contents not checked.")]

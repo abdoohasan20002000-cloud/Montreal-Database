@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 import streamlit as st
+from streamlit.errors import StreamlitPageNotFoundError
 
 ROOT = Path(__file__).parent
 PACKAGE = "geotech"
@@ -109,54 +110,75 @@ def load_current_modules():
             state["pages_from"] = pages
 
 
+def _app_files():
+    return _files_now(), _page_files(), _stamps([ROOT / "Map.py"])
+
+
+def _newest(files):
+    return max((v[0] for part in files for v in part.values() if v), default=0)
+
+
 def _changed_since(files_at_start, wait_s=2.0):
     """Whether any app file changed since this run started. Right after a pull it waits a moment, because a pull writes
     geotech/ before views/ and the page that failed may still be on its way."""
-    newest = max((v[0] for part in files_at_start for v in part.values() if v), default=0)
     deadline = time.monotonic() + wait_s
-    while (_files_now(), _page_files()) == files_at_start:
-        if time.monotonic() > deadline or time.time_ns() - newest > 10e9:
+    while _app_files() == files_at_start:
+        if time.monotonic() > deadline or time.time_ns() - _newest(files_at_start) > 10e9:
             return False
         time.sleep(0.1)
     return True
 
 
-def run_page(page, files_at_start):
-    """Run the page. A commit can land while a run is under way, so that the page and the modules come from different
-    commits. If the page fails and an app file changed since this run started, run it again on the new files; any
-    other error is shown as usual."""
-    try:
-        page.run()
-    except Exception:  # st.rerun() and st.stop() raise BaseException subclasses, so they pass through
-        if _changed_since(files_at_start):
-            st.rerun()
-        raise
+def _worth_retrying(files_at_start):
+    """After a failure: whether this run may have mixed code from two commits, so that running it again could work.
+    Yes if an app file changed during the run, or once per visitor while the files are fresh from a pull (the run
+    may have used page code Streamlit compiled before the pull)."""
+    if _changed_since(files_at_start):
+        return True
+    key = hash(repr(files_at_start))
+    if time.time_ns() - _newest(files_at_start) < 30e9 and st.session_state.get("_retried_after_update") != key:
+        st.session_state["_retried_after_update"] = key
+        return True
+    return False
 
 
-files_at_start = (_files_now(), _page_files())  # before the module check, so a commit landing after it is noticed
-load_current_modules()
-from geotech import ui  # noqa: E402  (after the module check on purpose)
+def main():
+    load_current_modules()
+    from geotech import ui  # after the module check on purpose
 
-st.set_page_config(page_title="Montréal Geotechnical Atlas", page_icon="🪨", layout="wide",
-                   initial_sidebar_state="auto")
-ui.apply_style()
+    st.set_page_config(page_title="Montréal Geotechnical Atlas", page_icon="🪨", layout="wide",
+                       initial_sidebar_state="auto")
+    ui.apply_style()
+    pages = {
+        "Navigate": [
+            st.Page("views/home.py", title="Home", icon=":material/home:", default=True),
+            st.Page("views/guide.py", title="User guide", icon=":material/menu_book:"),
+        ],
+        "Explore the data": [
+            st.Page("views/catalogue.py", title="Data catalogue", icon=":material/dataset:"),
+            st.Page("views/explore.py", title="Map and 3D", icon=":material/map:"),
+            st.Page("views/insights.py", title="Insights", icon=":material/insights:"),
+            st.Page("views/site_report.py", title="Site report", icon=":material/location_searching:"),
+        ],
+        "Contribute": [
+            st.Page("views/contribute.py", title="Contribute data", icon=":material/upload_file:"),
+            st.Page("views/curate.py", title="Curate", icon=":material/fact_check:"),
+        ],
+    }
+    page = st.navigation(pages, position="sidebar", expanded=True)
+    ui.sidebar_credit()  # pinned to the foot of the sidebar by CSS, after any page filters
+    page.run()
 
-pages = {
-    "Navigate": [
-        st.Page("views/home.py", title="Home", icon=":material/home:", default=True),
-        st.Page("views/guide.py", title="User guide", icon=":material/menu_book:"),
-    ],
-    "Explore the data": [
-        st.Page("views/catalogue.py", title="Data catalogue", icon=":material/dataset:"),
-        st.Page("views/explore.py", title="Map and 3D", icon=":material/map:"),
-        st.Page("views/insights.py", title="Insights", icon=":material/insights:"),
-        st.Page("views/site_report.py", title="Site report", icon=":material/location_searching:"),
-    ],
-    "Contribute": [
-        st.Page("views/contribute.py", title="Contribute data", icon=":material/upload_file:"),
-        st.Page("views/curate.py", title="Curate", icon=":material/fact_check:"),
-    ],
-}
-page = st.navigation(pages, position="sidebar", expanded=True)
-ui.sidebar_credit()  # pinned to the foot of the sidebar by CSS, after any page filters
-run_page(page, files_at_start)
+
+# Errors that code from two commits typically raises when it meets (a missing helper, column, argument or page).
+# Anything else, such as a failed upload, is shown as usual.
+MIXED_CODE_ERRORS = (AttributeError, ImportError, NameError, KeyError, TypeError, SyntaxError, StreamlitPageNotFoundError)
+
+files_at_start = _app_files()  # before the module check, so a commit landing after it is noticed
+try:
+    main()
+except MIXED_CODE_ERRORS:  # st.rerun() and st.stop() raise BaseException subclasses, so they pass through
+    if _worth_retrying(files_at_start):
+        _forget_compiled_pages()
+        st.rerun()
+    raise

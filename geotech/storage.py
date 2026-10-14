@@ -7,6 +7,7 @@ restart, so the local backend is for trying the app only.
 import json
 import os
 import re
+import sys
 import tempfile
 import threading
 import uuid
@@ -22,7 +23,8 @@ except ImportError:  # Windows
     fcntl = None
 
 LOCAL_DIR = config.ROOT / "local_uploads"
-_IN_MEMORY_LOCK = threading.Lock()
+# Used where there is no fcntl (Windows). Kept on sys so a live update that reloads this module reuses it.
+_IN_MEMORY_LOCK = sys.__dict__.setdefault("_geotech_catalogue_lock", threading.Lock())
 
 
 def now_iso():
