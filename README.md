@@ -1,4 +1,4 @@
-# Montréal Geotechnical Atlas
+# Montréal Database
 
 A shared store for the ground data collected on the Island of Montréal: boreholes and SPT, CPT, lab tests, shear-wave
 velocity and other geophysics, groundwater, monitoring, ground deformation, earthquake records, environmental
