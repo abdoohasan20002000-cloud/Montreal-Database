@@ -1,5 +1,6 @@
 """Entry point: page setup, shared style and navigation."""
 import importlib
+import importlib.util
 import sys
 import threading
 from pathlib import Path
@@ -14,21 +15,26 @@ READ_ONCE = [ROOT / "data" / "regions.geojson", ROOT / "data" / "island_outline.
 
 @st.cache_resource(show_spinner=False)
 def _loader_state():
-    """One per server process, kept across reruns and module reloads: a lock, and the files the loaded modules came
-    from."""
-    return {"lock": threading.Lock(), "loaded_from": None}
+    """One per server process, kept across reruns and module reloads: a lock, the files the loaded modules came from,
+    and the modules that failed to import from them."""
+    return {"lock": threading.Lock(), "loaded_from": None, "failed": set()}
 
 
-def _files_now():
-    """{file: (modification time, size)} for every geotech source file and the data files it keeps in memory."""
+def _stamps(paths):
+    """{file: (modification time, size)}; None for a file that is missing (or was just removed)."""
     out = {}
-    for f in sorted((ROOT / PACKAGE).glob("*.py")) + READ_ONCE:
+    for f in paths:
         try:
             s = f.stat()
             out[f.relative_to(ROOT).as_posix()] = (s.st_mtime_ns, s.st_size)
-        except OSError:  # a missing data file is a state too
+        except OSError:
             out[f.relative_to(ROOT).as_posix()] = None
     return out
+
+
+def _files_now():
+    """Every geotech source file and the data files it keeps in memory."""
+    return _stamps(sorted((ROOT / PACKAGE).glob("*.py")) + READ_ONCE)
 
 
 def _module_names(files):
@@ -36,8 +42,25 @@ def _module_names(files):
     return [PACKAGE] + [f"{PACKAGE}.{s}" for s in stems if s != "__init__"]
 
 
+def _page_files():
+    return _stamps(sorted((ROOT / "views").glob("*.py")))
+
+
 def _current(state, files):
-    return state["loaded_from"] == files and all(name in sys.modules for name in _module_names(files))
+    return state["loaded_from"] == files and all(name in sys.modules or name in state["failed"]
+                                                 for name in _module_names(files))
+
+
+def _forget_bytecode(files):
+    """Python reuses a module's cached bytecode when the source has the same size and the same whole second, so two
+    updates within one second could bring back the older code. Remove it before reloading."""
+    for f in files:
+        if f.endswith(".py"):
+            try:
+                Path(importlib.util.cache_from_source(str(ROOT / f))).unlink(missing_ok=True)
+            except OSError:  # a read-only folder: no bytecode is written there either
+                pass
+    importlib.invalidate_caches()  # and see modules added since the import system last listed the folder
 
 
 def load_current_modules():
@@ -51,7 +74,8 @@ def load_current_modules():
     - One lock for the whole process, so two visitors never unload modules the other is still importing.
     - The files are read before importing, so a commit that lands during the import is picked up on the next run.
     - Streamlit's own reloader is told to leave geotech/ alone (server.folderWatchBlacklist in .streamlit/config.toml),
-      so nothing else unloads these modules."""
+      so nothing else unloads these modules.
+    - A module that fails to import is left out, so only the pages that use it show the error."""
     state = _loader_state()
     if _current(state, _files_now()):
         return
@@ -62,17 +86,37 @@ def load_current_modules():
                 return
             for name in [n for n in sys.modules if n == PACKAGE or n.startswith(PACKAGE + ".")]:
                 sys.modules.pop(name, None)
+            _forget_bytecode(files)
+            failed = set()
             try:
                 for name in _module_names(files):
-                    importlib.import_module(name)
-            except (KeyError, ImportError):  # an import outside this lock raced this one: start again
+                    try:
+                        importlib.import_module(name)
+                    except KeyError:
+                        raise
+                    except Exception:  # broken in this commit: the pages that import it show the error themselves
+                        failed.add(name)
+            except KeyError:  # an import outside this lock raced this one: start again
                 if attempt == 2:
                     raise
                 continue
-            state["loaded_from"] = files
+            state["loaded_from"], state["failed"] = files, failed
             return
 
 
+def run_page(page, files_at_start):
+    """Run the page. A commit can land between the module check and the page, so that the page and the modules come
+    from different commits. If the page fails on a missing name and an app file changed since this run started, run
+    it again on the new files. Any other error is shown as usual."""
+    try:
+        page.run()
+    except (AttributeError, ImportError, NameError):
+        if (_files_now(), _page_files()) != files_at_start:
+            st.rerun()
+        raise
+
+
+files_at_start = (_files_now(), _page_files())  # before the module check, so a commit landing after it is noticed
 load_current_modules()
 from geotech import ui  # noqa: E402  (after the module check on purpose)
 
@@ -98,4 +142,4 @@ pages = {
 }
 page = st.navigation(pages, position="sidebar", expanded=True)
 ui.sidebar_credit()  # pinned to the foot of the sidebar by CSS, after any page filters
-page.run()
+run_page(page, files_at_start)

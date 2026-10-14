@@ -179,9 +179,11 @@ def test_french_csv_decimal_commas_are_read_as_numbers():
 
 def test_large_tables_are_checked_on_their_first_rows(monkeypatch):
     monkeypatch.setattr(validate, "CHECK_ROWS", 5)
-    body = "hole_id,n_field\n" + "".join(f"H{i},{i}\n" for i in range(20))
-    rep = validate._check_content(body.encode(), "big.csv")
-    assert "first 5 rows" in rep[0][1]
+    table = "hole_id,n_field\n" + "".join(f"H{i},{i}\n" for i in range(20))
+    rep = validate._check_content(table.encode(), "big.csv")
+    assert "more than 5 rows" in rep[0][1] and "first 5 rows" in rep[0][1]
+    table = "hole_id,n_field\n" + "".join(f"H{i},{i}\n" for i in range(5))
+    assert validate._check_content(table.encode(), "five.csv")[0][1] == "Table read: 5 rows, 2 columns."
 
 
 def test_island_check_on_many_points_matches_one_by_one():

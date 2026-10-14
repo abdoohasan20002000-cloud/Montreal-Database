@@ -1,6 +1,7 @@
 """Helpers shared by the Streamlit pages: colours, page style, headers, cards, maps and cached data."""
 import html
 import mimetypes
+import threading
 from pathlib import Path
 
 import folium
@@ -412,15 +413,22 @@ def secrets():
         return {}
 
 
+@st.cache_resource(show_spinner=False)
+def _store_lock():
+    """One lock for the local upload folder, kept across live updates (the module that defines it may be reloaded)."""
+    return threading.Lock()
+
+
 @st.cache_resource(max_entries=1, show_spinner=False)
-def _store(code_stamp):
-    return storage.get_store(secrets())
+def _store(storage_py_stamp):
+    return storage.get_store(secrets(), lock=_store_lock())
 
 
 def get_store():
     """The shared store for contributed files. It is built again when storage.py changes, so after a live update the
     pages never call an object made from the old code."""
-    return _store(_stamp(Path(storage.__file__)))
+    f = Path(storage.__file__)
+    return _store((f.stat().st_mtime_ns, f.stat().st_size))
 
 
 def _stamp(*paths):

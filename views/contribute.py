@@ -116,9 +116,10 @@ if submitted:
         st.stop()
     hashes = {r["sha256"]: r["id"] for r in store.list()}
     checked = []
-    for f in files:
-        data = f.getvalue()
-        report, digest = validate.check_upload(data, f.name, footprint, work_year, hashes)
+    for i, f in enumerate(files, 1):
+        with st.spinner(f"Checking {f.name} ({i} of {len(files)}). A large workbook can take a minute…"):
+            data = f.getvalue()
+            report, digest = validate.check_upload(data, f.name, footprint, work_year, hashes)
         hashes.setdefault(digest, f"{f.name}, earlier in this submission")
         checked.append((f, data, report, digest))
 

@@ -29,13 +29,12 @@ def check_upload(data: bytes, file_name: str, footprint_mtm8, work_year, existin
     if not data:
         results.append(("block", "File is empty."))
 
-    shp, how = geo.island_shape_mtm8()
     if footprint_mtm8 is None:
         results.append(("block", "No map location given."))
-    elif not shp.intersects(footprint_mtm8):
-        results.append(("block", f"Location is off the island ({how})."))
     else:
-        results.append(("ok", f"Location is on the island ({how})."))
+        inside, how = geo.island_intersects(footprint_mtm8)
+        results.append(("ok", f"Location is on the island ({how}).") if inside else
+                       ("block", f"Location is off the island ({how})."))
 
     if work_year and int(work_year) < config.PRE_MODERN_YEAR:
         results.append(("warn", "Work date before 1960: flagged pre-1960 (SPT N about half of modern values)."))
@@ -57,19 +56,20 @@ def _check_content(data, name):
         except Exception as e:  # unreadable table
             return [("block", f"Table could not be read: {e}")]
         read = f"Table read: {len(df):,} rows, {len(df.columns)} columns."
-        if len(df) == CHECK_ROWS:
-            read = (f"Table read: {len(df.columns)} columns. It is large, so the checks below cover its first "
-                    f"{CHECK_ROWS:,} rows; the curator checks the rest.")
+        if len(df) > CHECK_ROWS:
+            df = df.head(CHECK_ROWS)
+            read = (f"Table read: more than {CHECK_ROWS:,} rows, {len(df.columns)} columns. The checks below cover "
+                    f"its first {CHECK_ROWS:,} rows; the curator checks the rest.")
         return [("ok", read)] + check_table(df)
     return [("ok", "Stored as an original file; contents not checked.")]
 
 
 def _read_table(data, name):
     if name.endswith((".xlsx", ".xls")):
-        return pd.read_excel(io.BytesIO(data), nrows=CHECK_ROWS)
+        return pd.read_excel(io.BytesIO(data), nrows=CHECK_ROWS + 1)  # one more row tells whether there are more
     first = data[:65536].split(b"\n", 1)[0].decode("utf-8-sig", errors="replace")
     sep = ";" if first.count(";") > first.count(",") else ","  # French Excel
-    df = pd.read_csv(io.BytesIO(data), sep=sep, nrows=CHECK_ROWS, encoding="utf-8-sig", encoding_errors="replace")
+    df = pd.read_csv(io.BytesIO(data), sep=sep, nrows=CHECK_ROWS + 1, encoding="utf-8-sig", encoding_errors="replace")
     if sep == ";":
         for c in df.columns:  # decimal commas
             if df[c].dtype == object or isinstance(df[c].dtype, pd.StringDtype):  # text columns in pandas 2 and 3

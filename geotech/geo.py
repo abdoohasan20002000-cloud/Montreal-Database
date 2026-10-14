@@ -1,6 +1,7 @@
 """Coordinate conversion, the island check and the regions (boroughs and linked cities)."""
 import json
-from functools import lru_cache
+import threading
+from functools import lru_cache, wraps
 
 import numpy as np
 
@@ -12,6 +13,19 @@ from . import config
 
 _to_wgs = Transformer.from_crs(config.CRS_MTM8, config.CRS_WGS84, always_xy=True)
 _to_mtm = Transformer.from_crs(config.CRS_WGS84, config.CRS_MTM8, always_xy=True)
+
+# The island and region shapes are shared by every visitor. GEOS builds a shape's search index the first time it is
+# queried and is not safe when two threads do that at once (the whole server process aborts), so the functions below
+# that query the shared shapes take turns.
+_SHAPES_LOCK = threading.RLock()
+
+
+def _one_at_a_time(func):
+    @wraps(func)
+    def run(*args, **kwargs):
+        with _SHAPES_LOCK:
+            return func(*args, **kwargs)
+    return run
 
 
 def mtm8_to_wgs84(x, y):
@@ -52,11 +66,20 @@ def island_shape_mtm8():
     return shp, how
 
 
+@_one_at_a_time
 def on_island(x_mtm8, y_mtm8):
     shp, _ = island_shape_mtm8()
     return shp.contains(Point(x_mtm8, y_mtm8))
 
 
+@_one_at_a_time
+def island_intersects(geom_mtm8):
+    """(whether a footprint in MTM 8 touches the island, which check was used)."""
+    shp, how = island_shape_mtm8()
+    return shp.intersects(geom_mtm8), how
+
+
+@_one_at_a_time
 def on_island_many(x_mtm8, y_mtm8):
     """on_island for arrays of coordinates, all at once."""
     shp, _ = island_shape_mtm8()
@@ -94,6 +117,7 @@ def region_kinds():
     return {n: k for n, k, _ in regions()}
 
 
+@_one_at_a_time
 def region_of(x, y):
     """Region name for each MTM 8 point: the borough or city that contains it, config.OFF_ISLAND outside them all,
     and "" where the position is unknown. Derived from the City's administrative limits (data/regions.geojson)."""
@@ -119,6 +143,7 @@ def region_of(x, y):
     return out
 
 
+@_one_at_a_time
 def regions_touching(geom_mtm8):
     """Names of the regions a footprint (point, line or area, MTM 8) touches; config.OFF_ISLAND if none."""
     names = [n for n, _, g in regions() if g.intersects(geom_mtm8)]
@@ -128,6 +153,7 @@ def regions_touching(geom_mtm8):
     return names or ([config.OFF_ISLAND] if regions() else [])
 
 
+@_one_at_a_time
 def region_shape(names):
     """Union of the named regions in MTM 8 (None if no names or no regions file)."""
     from shapely.ops import unary_union

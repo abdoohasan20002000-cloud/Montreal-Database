@@ -7,6 +7,7 @@ restart, so the local backend is for trying the app only.
 import json
 import os
 import re
+import tempfile
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -33,18 +34,22 @@ class LocalStore:
     kind = "local folder (temporary)"
     temporary = True  # tested by the pages instead of the class, which a live update can replace
 
-    def __init__(self, root: Path = LOCAL_DIR):
+    def __init__(self, root: Path = LOCAL_DIR, lock=None):
+        """lock: shared by every store on this folder, so catalogue changes take turns even when a live update builds
+        a new store while visitors still hold the old one."""
         self.root = root
         (root / "files").mkdir(parents=True, exist_ok=True)
         self.cat = root / "catalogue.json"
-        self._lock = threading.Lock()  # one store serves every visitor, so catalogue changes take turns
+        self._lock = lock or threading.Lock()
 
     def _all(self):
         return json.loads(self.cat.read_text(encoding="utf-8")) if self.cat.exists() else []
 
     def _save(self, rows):
-        tmp = self.cat.with_suffix(".tmp")  # written whole, then swapped in, so a reader never sees half a file
-        tmp.write_text(json.dumps(rows, indent=1, ensure_ascii=False), encoding="utf-8")
+        # Written whole to a file of its own, then swapped in, so a reader never sees half a catalogue.
+        fd, tmp = tempfile.mkstemp(dir=self.root, prefix="catalogue.", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(rows, f, indent=1, ensure_ascii=False)
         os.replace(tmp, self.cat)
 
     def list(self, status=None):
@@ -104,8 +109,8 @@ class SupabaseStore:
         self.client.table("uploads").update(fields).eq("id", upload_id).execute()
 
 
-def get_store(secrets):
+def get_store(secrets, lock=None):
     url = secrets.get("SUPABASE_URL") if secrets else None
     if url:
         return SupabaseStore(url, secrets["SUPABASE_SERVICE_KEY"], secrets.get("SUPABASE_BUCKET", "uploads"))
-    return LocalStore()
+    return LocalStore(lock=lock)
