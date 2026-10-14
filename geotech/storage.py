@@ -10,12 +10,19 @@ import re
 import tempfile
 import threading
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config
 
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
+
 LOCAL_DIR = config.ROOT / "local_uploads"
+_IN_MEMORY_LOCK = threading.Lock()
 
 
 def now_iso():
@@ -34,13 +41,25 @@ class LocalStore:
     kind = "local folder (temporary)"
     temporary = True  # tested by the pages instead of the class, which a live update can replace
 
-    def __init__(self, root: Path = LOCAL_DIR, lock=None):
-        """lock: shared by every store on this folder, so catalogue changes take turns even when a live update builds
-        a new store while visitors still hold the old one."""
+    def __init__(self, root: Path = LOCAL_DIR):
         self.root = root
         (root / "files").mkdir(parents=True, exist_ok=True)
         self.cat = root / "catalogue.json"
-        self._lock = lock or threading.Lock()
+
+    @contextmanager
+    def _turn(self):
+        """Held while the catalogue is read and rewritten. It is a lock on a file, so changes take turns even across
+        store objects (a live update builds a new one while visitors still hold the old) and processes."""
+        if fcntl is None:  # Windows: one process, so a lock in memory does
+            with _IN_MEMORY_LOCK:
+                yield
+            return
+        with open(self.root / "catalogue.lock", "a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
 
     def _all(self):
         return json.loads(self.cat.read_text(encoding="utf-8")) if self.cat.exists() else []
@@ -62,14 +81,14 @@ class LocalStore:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
         record["storage_path"] = path
-        with self._lock:
+        with self._turn():
             self._save(self._all() + [record])
 
     def get_bytes(self, record) -> bytes:
         return (self.root / "files" / record["storage_path"]).read_bytes()
 
     def update(self, upload_id, **fields):
-        with self._lock:
+        with self._turn():
             rows = self._all()
             for r in rows:
                 if r["id"] == upload_id:
@@ -109,8 +128,8 @@ class SupabaseStore:
         self.client.table("uploads").update(fields).eq("id", upload_id).execute()
 
 
-def get_store(secrets, lock=None):
+def get_store(secrets):
     url = secrets.get("SUPABASE_URL") if secrets else None
     if url:
         return SupabaseStore(url, secrets["SUPABASE_SERVICE_KEY"], secrets.get("SUPABASE_BUCKET", "uploads"))
-    return LocalStore(lock=lock)
+    return LocalStore()

@@ -194,7 +194,7 @@ def build_3d():
         "TerrainLayer",
         elevation_decoder={"rScaler": 256 * ex, "gScaler": ex, "bScaler": ex / 256, "offset": -32768 * ex},
         elevation_data=terrain.TERRARIUM_URL,
-        texture=SURFACES[surface], color=[176, 196, 212], max_zoom=14, strategy="no-overlap",
+        texture=SURFACES[surface], color=[176, 196, 212], max_zoom=14,
     )]
 
     def ground(df):
@@ -240,8 +240,9 @@ def build_3d():
             ring = np.asarray(poly.exterior.coords)
             zr = np.nan_to_num(terrain.elevation(ring[:, 0], ring[:, 1]), nan=0.0) * ex + 25
             paths.append({"path": [[x, y, z] for (x, y), z in zip(ring, zr)]})
+        # pydeck reads a bare string as a data field; quoted, it is passed through as the value "pixels".
         layers.append(pdk.Layer("PathLayer", paths, get_path="path", get_color=rgb(ui.ACCENT_DARK, 255), get_width=4,
-                                width_units="pixels"))
+                                width_units='"pixels"'))
     view_state = pdk.ViewState(latitude=45.525, longitude=-73.64, zoom=10.8, pitch=60, bearing=-25)
     return pdk.Deck(layers=layers, initial_view_state=view_state, map_style=None,
                     tooltip={"html": "<b>{t1}</b><br/>{t2}<br/>{t3}", "style": {"fontSize": "12px"}})

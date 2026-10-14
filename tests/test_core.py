@@ -193,16 +193,29 @@ def test_island_check_on_many_points_matches_one_by_one():
 
 
 def test_local_store_keeps_every_record_when_written_at_once(tmp_path):
+    # Two store objects on one folder, as after a live update: one adds while the other approves.
     import threading
-    store = LocalStore(tmp_path)
-    assert store.temporary
-    threads = [threading.Thread(target=store.add, args=({"id": f"u{i}", "file_name": "a.txt", "status": "pending"}, b"x"))
+    old, new = LocalStore(tmp_path), LocalStore(tmp_path)
+    assert old.temporary
+    for i in range(10):
+        old.add({"id": f"seed{i}", "file_name": "a.txt", "status": "pending"}, b"x")
+    threads = [threading.Thread(target=new.add, args=({"id": f"u{i}", "file_name": "a.txt", "status": "pending"}, b"x"))
                for i in range(20)]
+    threads += [threading.Thread(target=old.update, args=(f"seed{i}",), kwargs={"status": "approved"}) for i in range(10)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
-    assert sorted(r["id"] for r in store.list()) == sorted(f"u{i}" for i in range(20))
+    rows = {r["id"]: r["status"] for r in LocalStore(tmp_path).list()}
+    assert len(rows) == 30 and all(rows[f"seed{i}"] == "approved" for i in range(10))
+
+
+def test_old_excel_workbooks_are_read_and_checked():
+    from pathlib import Path
+    data = (Path(__file__).parent / "data" / "three_holes.xls").read_bytes()
+    rep = validate._check_content(data, "three_holes.xls")
+    msgs = " ".join(m for _, m in rep)
+    assert rep[0] == ("ok", "Table read: 3 rows, 6 columns.") and "swapped" in msgs and "N = 999" in msgs
 
 
 def test_supabase_store_is_marked_permanent():

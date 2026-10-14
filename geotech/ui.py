@@ -1,8 +1,7 @@
 """Helpers shared by the Streamlit pages: colours, page style, headers, cards, maps and cached data."""
 import html
 import mimetypes
-import threading
-from pathlib import Path
+import uuid
 
 import folium
 import streamlit as st
@@ -413,31 +412,26 @@ def secrets():
         return {}
 
 
-@st.cache_resource(show_spinner=False)
-def _store_lock():
-    """One lock for the local upload folder, kept across live updates (the module that defines it may be reloaded)."""
-    return threading.Lock()
+# Names this load of the geotech modules. Map.py reloads them all together after an update, so the shared caches
+# below are keyed on it: a visitor whose run still has the old modules can only fill entries for the old code, never
+# the entries the new code reads (keying on the files on disk would let it do that).
+LOADED = uuid.uuid4().hex
 
 
-@st.cache_resource(max_entries=1, show_spinner=False)
-def _store(storage_py_stamp):
-    return storage.get_store(secrets(), lock=_store_lock())
+@st.cache_resource(max_entries=2, show_spinner=False)
+def _store(loaded):
+    return storage.get_store(secrets())
 
 
 def get_store():
-    """The shared store for contributed files. It is built again when storage.py changes, so after a live update the
-    pages never call an object made from the old code."""
-    f = Path(storage.__file__)
-    return _store((f.stat().st_mtime_ns, f.stat().st_size))
+    """The shared store for contributed files, built by the code this page runs with."""
+    return _store(LOADED)
 
 
 def _stamp(*paths):
-    """Cache key part that changes when a data file or the loading code changes, so a redeploy that only updates
-    data/ or geotech/data.py never serves stale tables. The region limits and the island outline are always in it,
-    since every table gets its region and island flag from them."""
-    files = list(paths) + [Path(data.__file__), Path(geo.__file__), Path(config.__file__), config.REGIONS_GEOJSON,
-                           config.ISLAND_OUTLINE]
-    return tuple((str(f), f.stat().st_mtime_ns if f.exists() else 0) for f in files)
+    """Cache key part for tables: the data files as they are now, and this load of the code (which also covers the
+    region limits and island outline, since a change to them reloads the modules)."""
+    return tuple((str(f), f.stat().st_mtime_ns if f.exists() else 0) for f in paths) + (LOADED,)
 
 
 # A few entries each: the stamp changes with every update, and older copies would otherwise stay in memory.
