@@ -27,10 +27,11 @@ SHORE_TOLERANCE_M = 250
 
 # Credit shown on the home page and at the foot of the sidebar. Leave a field empty to hide it.
 # The app's name, shown in the browser tab, the headers and the sidebar. Change it here and it changes everywhere.
-APP_NAME = "Montréal Geotechnical Atlas"
+APP_NAME = "Montreal Database Archive"
 
 # Whose work this is. "photo" is a file under assets/ (jpg or png, square looks best); leave it out for no portrait.
-CREDITS = {"name": "", "role": "", "supervisor": "", "photo": "portrait.jpg"}
+CREDITS = {"name": "Abdelrahman Elrawy", "role": "PhD candidate, Civil Engineering, McGill University",
+           "supervisor": "", "photo": "portrait.jpg"}
 ASSETS = ROOT / "assets"
 DATA_CREDIT = ("Measured Vs: Rosset et al. compilation · Borehole archive: City of Montréal, MTQ and MELCC")
 
