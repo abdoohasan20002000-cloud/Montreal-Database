@@ -26,7 +26,12 @@ ISLAND_BBOX = {"lon_min": -73.99, "lon_max": -73.46, "lat_min": 45.40, "lat_max"
 SHORE_TOLERANCE_M = 250
 
 # Credit shown on the home page and at the foot of the sidebar. Leave a field empty to hide it.
-CREDITS = {"name": "", "role": "", "supervisor": ""}
+# The app's name, shown in the browser tab, the headers and the sidebar. Change it here and it changes everywhere.
+APP_NAME = "Montréal Geotechnical Atlas"
+
+# Whose work this is. "photo" is a file under assets/ (jpg or png, square looks best); leave it out for no portrait.
+CREDITS = {"name": "", "role": "", "supervisor": "", "photo": "portrait.jpg"}
+ASSETS = ROOT / "assets"
 DATA_CREDIT = ("Measured Vs: Rosset et al. compilation · Borehole archive: City of Montréal, MTQ and MELCC")
 
 PRE_MODERN_YEAR = 1960  # pre-1960 SPT N reads about half of modern values (era multiplier ~1.7)

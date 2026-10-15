@@ -12,7 +12,7 @@ approved, pending = store.list(status="approved"), store.list(status="pending")
 cat = catalogue.table(catalogue.builtin(sites, prof, insight.load_regressions(), bh, samples)
                       + catalogue.contributed(approved))
 
-ui.hero("Montréal Geotechnical Atlas",
+ui.hero(config.APP_NAME,
         "A shared store for the ground data collected in Montréal: boreholes and SPT, CPT, lab tests, shear-wave "
         "velocity and other geophysics, groundwater, monitoring, reports and maps, from any year. Find it by type, "
         "borough or city and year, see it on a 2D or 3D map, get a report for any location, download it with its "

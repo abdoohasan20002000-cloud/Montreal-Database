@@ -1,4 +1,5 @@
 """Helpers shared by the Streamlit pages: colours, page style, headers, cards, maps and cached data."""
+import base64
 import html
 import mimetypes
 import uuid
@@ -66,6 +67,8 @@ h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
 .gx-side-label { font-family:"JetBrains Mono", ui-monospace, monospace; font-size:0.68rem; letter-spacing:0.26em;
   text-transform:uppercase; color:var(--muted); margin:6px 0 2px; }
 .gx-credit { border-top:1px solid var(--line); margin-top:22px; padding-top:16px; }
+.gx-credit .p { width:52px; height:52px; border-radius:50%%; object-fit:cover; display:block; margin-bottom:10px;
+  border:2px solid var(--line); }
 .gx-credit .n { font-family:"Space Grotesk", sans-serif; font-weight:700; color:var(--ink); font-size:1rem; }
 .gx-credit .r { color:var(--muted); font-size:0.8rem; line-height:1.5; margin-top:3px; }
 
@@ -225,8 +228,9 @@ def apply_style():
 
 
 # ---- headers, cards, chips -------------------------------------------------------------
-def hero(title, subtitle, chips=(), eyebrow="Montréal Geotechnical Atlas", large=False, byline=None):
+def hero(title, subtitle, chips=(), eyebrow=None, large=False, byline=None):
     """Header card. `chips` and `byline` may hold simple HTML written by the app (never user input)."""
+    eyebrow = config.APP_NAME if eyebrow is None else eyebrow
     chip_html = "".join(f'<span class="gx-chip">{c}</span>' for c in chips)
     st.markdown(f'<div class="gx-hero{" lg" if large else ""}"><div class="gx-eyebrow">{html.escape(eyebrow)}</div>'
                 f'<h1>{html.escape(title)}</h1><p>{html.escape(subtitle)}</p><div class="gx-rule"></div>'
@@ -243,14 +247,34 @@ def credit_byline():
     return '<span class="dot">·</span>'.join(parts) if parts else html.escape(config.DATA_CREDIT)
 
 
+@st.cache_data(show_spinner=False, max_entries=2)
+def _portrait_src(name, stamp):
+    """The portrait as a data: URL, so it survives in the HTML the sidebar writes. Empty when there is no file."""
+    f = config.ASSETS / name
+    try:
+        kind = mimetypes.guess_type(name)[0] or "image/jpeg"
+        return f"data:{kind};base64," + base64.b64encode(f.read_bytes()).decode("ascii")
+    except OSError:  # no portrait saved yet
+        return ""
+
+
+def portrait_src():
+    f = config.ASSETS / (config.CREDITS.get("photo") or "")
+    if not config.CREDITS.get("photo") or not f.exists():
+        return ""
+    return _portrait_src(config.CREDITS["photo"], f.stat().st_mtime_ns)
+
+
 def sidebar_credit():
     c = config.CREDITS
     if c.get("name"):
-        body = (f'<div class="n">{html.escape(c["name"])}</div>'
+        src = portrait_src()
+        body = ((f'<img class="p" src="{src}" alt="">' if src else "")
+                + f'<div class="n">{html.escape(c["name"])}</div>'
                 + (f'<div class="r">{html.escape(c["role"])}</div>' if c.get("role") else "")
                 + (f'<div class="r">Supervisor: {html.escape(c["supervisor"])}</div>' if c.get("supervisor") else ""))
     else:
-        body = ('<div class="n">Montréal Geotechnical Atlas</div>'
+        body = (f'<div class="n">{html.escape(config.APP_NAME)}</div>'
                 f'<div class="r">{html.escape(config.DATA_CREDIT)}</div>')
     with st.sidebar:
         st.markdown(f'<div class="gx-credit">{body}</div>', unsafe_allow_html=True)
@@ -421,7 +445,7 @@ def require_app_password():
     pw = secrets().get("APP_PASSWORD")
     if not pw or st.session_state.get("_unlocked"):
         return
-    hero("Montréal Geotechnical Atlas", "A shared archive of geotechnical data collected on the island since 2001. "
+    hero(config.APP_NAME, "A shared archive of geotechnical data collected on the island since 2001. "
          "Ask the curator for the password.", eyebrow="Private")
     typed = st.text_input("Password", type="password")
     if typed == pw:

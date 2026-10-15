@@ -146,7 +146,9 @@ def main():
     load_current_modules()
     from geotech import ui  # after the module check on purpose
 
-    st.set_page_config(page_title="Montréal Geotechnical Atlas", page_icon="🪨", layout="wide",
+    from geotech import config
+
+    st.set_page_config(page_title=config.APP_NAME, page_icon="🪨", layout="wide",
                        initial_sidebar_state="auto")
     ui.apply_style()
     ui.require_app_password()  # stops here, before any page is built, when APP_PASSWORD is in the secrets
