@@ -412,6 +412,26 @@ def secrets():
         return {}
 
 
+def require_app_password():
+    """One shared password for the whole app, read from APP_PASSWORD in the secrets.
+
+    Without that secret the app stays open to anyone with the link, which is the usual setting for a shared archive.
+    With it, nothing is shown until the password is typed: the visitor is stopped here, before the pages are built.
+    It is remembered for the browser tab only, so closing the tab asks again."""
+    pw = secrets().get("APP_PASSWORD")
+    if not pw or st.session_state.get("_unlocked"):
+        return
+    hero("Montréal Geotechnical Atlas", "A shared archive of geotechnical data collected on the island since 2001. "
+         "Ask the curator for the password.", eyebrow="Private")
+    typed = st.text_input("Password", type="password")
+    if typed == pw:
+        st.session_state["_unlocked"] = True
+        st.rerun()
+    if typed:
+        st.error("That password is not right.")
+    st.stop()
+
+
 # Names this load of the geotech modules. Map.py reloads them all together after an update, so the shared caches
 # below are keyed on it: a visitor whose run still has the old modules can only fill entries for the old code, never
 # the entries the new code reads (keying on the files on disk would let it do that).

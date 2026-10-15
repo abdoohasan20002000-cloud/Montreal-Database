@@ -78,6 +78,9 @@ streamlit run Map.py
    `Map.py`.
 4. In the app's **Settings → Secrets**, paste the contents of `.streamlit/secrets.toml.example` with your Supabase
    URL, service-role key and a curator password.
+5. Optional: add `APP_PASSWORD` to those secrets to close the app to the public. Without it anyone with the link can
+   look and contribute; with it nothing is shown until the password is typed, and it is asked again in each new
+   browser tab.
 
 ## Tests
 
