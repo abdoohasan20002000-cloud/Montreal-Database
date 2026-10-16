@@ -29,11 +29,13 @@ INK, INK_2, MUTED, ACCENT, ACCENT_DARK = "#0f1b2d", "#475569", "#566476", "#0891
 SURFACE = "#ffffff"
 
 ART_URL = "app/static/hero_mcgill.webp"  # McGill's Arts Building; made by scripts/make_hero_photo.py
+ART_FULL_URL = "app/static/hero_mcgill_full.webp"  # the same view with more sky, for the full-screen Home header
 
 _CSS = """
 <style>
 :root { --bg:#f5f8fb; --card:#ffffff; --line:#dbe4ec; --soft:#eef6f9; --ink:#0f1b2d; --ink2:#475569; --muted:#566476;
-  --accent:#0891b2; --accent-dark:#0e7490; --art:url("%(art)s"); }
+  --accent:#0891b2; --accent-dark:#0e7490; --art:url("%(art)s");
+  --art-full:url("%(art_full)s"); }
 
 /* page: a faint survey grid and a soft cyan glow */
 [data-testid="stApp"] { background:
@@ -75,15 +77,36 @@ h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
   -webkit-mask-image: linear-gradient(90deg, transparent 0%%, rgba(0,0,0,0.35) 30%%, #000 70%%);
   mask-image: linear-gradient(90deg, transparent 0%%, rgba(0,0,0,0.35) 30%%, #000 70%%); }
 .gx-hero > * { position:relative; z-index:1; }
-.gx-hero.lg { padding:54px 48px 40px; min-height:360px; }
-.gx-hero.lg::after { width:68%%; opacity:1; }
+/* Home: the photo fills the first screen, edge to edge, with the text on a dark wash. The top margin takes back the
+   page's top padding and the gap above the first element, so it starts right under the 60 px menu bar. */
+[data-testid="stMain"] { overflow-x:hidden; }
+.gx-hero.lg { width:100vw; margin:calc(60px - 5.6rem) 0 26px calc(50%% - 50vw); min-height:calc(100vh - 60px);
+  min-height:calc(100svh - 60px); border:0; border-radius:0; box-shadow:none; display:flex; flex-direction:column;
+  justify-content:center; padding:56px max(80px, calc((100vw - 1480px) / 2 + 80px)) 84px;
+  background: linear-gradient(90deg, rgba(7,18,33,0.86) 0%%, rgba(7,18,33,0.64) 40%%, rgba(7,18,33,0.14) 76%%,
+    rgba(7,18,33,0.04) 100%%), var(--art-full) 55%% 100%% / cover no-repeat, #1d2b3a; }
+.gx-hero.lg::after { display:none; }
+.gx-hero.lg .gx-eyebrow { color:#67e8f9; }
+.gx-hero.lg h1 { color:#ffffff; text-shadow:0 2px 22px rgba(0,0,0,0.35); }
+.gx-hero.lg p { color:rgba(255,255,255,0.92); }
+.gx-hero.lg .gx-byline, .gx-hero.lg .gx-byline b { color:#ffffff; }
+.gx-hero.lg .gx-byline .dot { color:rgba(255,255,255,0.55); }
+.gx-cue { position:absolute; left:max(80px, calc((100vw - 1480px) / 2 + 80px)); bottom:26px; display:flex;
+  flex-direction:column; align-items:flex-start; gap:6px; color:rgba(255,255,255,0.85); font:500 0.7rem/1 "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing:0.28em; text-transform:uppercase; pointer-events:none; }
+.gx-cue::after { content:""; width:10px; height:10px; border-right:2px solid currentColor; border-bottom:2px solid currentColor;
+  transform:rotate(45deg); animation:gx-bob 1.8s ease-in-out infinite; }
+@keyframes gx-bob { 0%%, 100%% { transform:translateY(0) rotate(45deg); } 50%% { transform:translateY(5px) rotate(45deg); } }
+@media (prefers-reduced-motion: reduce) { .gx-cue::after { animation:none; } }
 .gx-eyebrow { font-family:"JetBrains Mono", ui-monospace, monospace; font-size:0.72rem; letter-spacing:0.28em;
   text-transform:uppercase; color:var(--accent-dark); margin-bottom:10px; font-weight:500; }
 .gx-hero h1 { font-family:"Space Grotesk", sans-serif; color:var(--ink); font-weight:700; font-size:2.1rem; line-height:1.1;
   margin:0 0 10px 0; padding:0; }
 .gx-hero.lg h1 { font-size:clamp(2rem, 7vw, 3.3rem); margin-bottom:24px; overflow-wrap:normal; hyphens:manual; }
-@media (max-width: 640px) { .gx-hero.lg { padding:28px 20px 24px; min-height:0; } .gx-hero { padding:20px 18px; }
-  .gx-hero.lg p { font-size:1rem; } }
+@media (max-width: 640px) { .gx-hero { padding:20px 18px; } .gx-hero.lg p { font-size:1rem; }
+  .gx-cue { left:22px; }
+  .gx-hero.lg { padding:40px 22px 84px; background: linear-gradient(180deg, rgba(7,18,33,0.84) 0%%, rgba(7,18,33,0.62) 62%%,
+    rgba(7,18,33,0.3) 100%%), var(--art-full) 55%% 100%% / cover no-repeat, #1d2b3a; } }
 .gx-hero p { color:#334155; margin:0; font-size:1rem; line-height:1.6; max-width:780px; }
 .gx-hero.lg p { font-size:1.16rem; max-width:720px; }
 .gx-rule { width:150px; height:3px; border-radius:3px; margin:18px 0 14px;
@@ -225,18 +248,20 @@ TILES = {
 
 
 def apply_style():
-    st.markdown(_CSS % {"art": ART_URL}, unsafe_allow_html=True)
+    st.markdown(_CSS % {"art": ART_URL, "art_full": ART_FULL_URL}, unsafe_allow_html=True)
 
 
 # ---- headers, cards, chips -------------------------------------------------------------
 def hero(title, subtitle, chips=(), eyebrow=None, large=False, byline=None):
-    """Header card. `chips` and `byline` may hold simple HTML written by the app (never user input)."""
+    """Header card. `chips` and `byline` may hold simple HTML written by the app (never user input). `large` makes it
+    the full-screen photo header of the Home page."""
     eyebrow = config.APP_NAME if eyebrow is None else eyebrow
     chip_html = "".join(f'<span class="gx-chip">{c}</span>' for c in chips)
     st.markdown(f'<div class="gx-hero{" lg" if large else ""}"><div class="gx-eyebrow">{html.escape(eyebrow)}</div>'
                 f'<h1>{html.escape(title)}</h1><p>{html.escape(subtitle)}</p><div class="gx-rule"></div>'
                 + (f'<div class="gx-byline">{byline}</div>' if byline else "")
                 + (f'<div class="gx-chips">{chip_html}</div>' if chips else "")
+                + ('<div class="gx-cue">Scroll</div>' if large else "")
                 + "</div>", unsafe_allow_html=True)
 
 
