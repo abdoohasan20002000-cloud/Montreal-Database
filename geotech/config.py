@@ -36,7 +36,7 @@ ASSETS = ROOT / "assets"
 # People whose uploads go straight into the archive without waiting in the curator's queue. Matched against the
 # "Your name and organisation" field, ignoring case, so "Philippe Rosset, McGill" matches "Philippe Rosset".
 # The automatic file checks still run for them; a file that fails one is still refused.
-TRUSTED_CONTRIBUTORS = ("Philippe Rosset",)
+TRUSTED_CONTRIBUTORS = ("Philippe Rosset", "Luc Chouinard")
 
 
 def is_trusted(uploaded_by):
