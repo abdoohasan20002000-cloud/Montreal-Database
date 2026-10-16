@@ -106,7 +106,7 @@ h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
 @media (max-width: 640px) { .gx-hero { padding:20px 18px; } .gx-hero.lg p { font-size:1rem; }
   .gx-cue { left:22px; }
   .gx-hero.lg { padding:40px 22px 84px; background: linear-gradient(180deg, rgba(7,18,33,0.84) 0%%, rgba(7,18,33,0.62) 62%%,
-    rgba(7,18,33,0.3) 100%%), var(--art-full) 55%% 100%% / cover no-repeat, #1d2b3a; } }
+    rgba(7,18,33,0.3) 100%%), var(--art-full) 66%% 100%% / cover no-repeat, #1d2b3a; } }
 .gx-hero p { color:#334155; margin:0; font-size:1rem; line-height:1.6; max-width:780px; }
 .gx-hero.lg p { font-size:1.16rem; max-width:720px; }
 .gx-rule { width:150px; height:3px; border-radius:3px; margin:18px 0 14px;

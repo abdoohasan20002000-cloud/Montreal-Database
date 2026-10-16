@@ -155,8 +155,9 @@ with src:
     st.markdown(f"""
 **Sources.** {html.escape(config.DATA_CREDIT)}. Terrain in the 3D view: AWS Terrain Tiles
 (SRTM and other public elevation models). Basemaps: Esri (light grey canvas, streets, imagery and place names;
-© OpenStreetMap contributors and the GIS user community), OpenTopoMap. Header photo: McGill's Arts Building,
-taken by the app's author.
+© OpenStreetMap contributors and the GIS user community), OpenTopoMap. Header photo: "Arts Building, McGill University, Aug 31 2022"
+by D. Benjamin Miller, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Arts_Building,_McGill_University,_Aug_31_2022.jpg),
+used under the licence shown there; cropped.
 
 **Region limits.** "Limites administratives de l'agglomération de Montréal" (arrondissements et villes liées),
 Ville de Montréal open data portal, CC BY 4.0. A GitHub Action runs `scripts/fetch_regions.py` to download them,
