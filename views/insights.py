@@ -2,9 +2,10 @@
 import html
 
 import altair as alt
+import folium
 import pandas as pd
-import pydeck as pdk
 import streamlit as st
+from streamlit_folium import st_folium
 
 from geotech import catalogue, config, data, insight, ui
 
@@ -13,12 +14,11 @@ ui.hero("Insights",
         "where data is dense or thin, and what still needs checking.",
         chips=["Measured, derived and interpolated values labelled", "Source: Rosset compilation + archive"])
 
-with st.sidebar:
-    ui.sidebar_label("Filters")
-    regions = st.multiselect("Regions", catalogue.region_options(), placeholder="All boroughs and cities",
-                             key="ins_regions", help="Boroughs and linked cities; each point's region is derived from "
-                                                     "its coordinates and the City's limits.")
-    show_far = st.toggle("Include Vs sites off the island", value=False)
+f1, f2 = st.columns([3, 1], vertical_alignment="bottom")
+regions = f1.multiselect("Regions", catalogue.region_options(), placeholder="All boroughs and cities",
+                         key="ins_regions", help="Boroughs and linked cities; each point's region is derived from "
+                                                 "its coordinates and the City's limits.")
+show_far = f2.toggle("Include Vs sites off the island", value=False)
 
 bh, samples, label = ui.load_archive(False)
 sites, prof = ui.load_vs()
@@ -135,23 +135,44 @@ with b:
 # ---- coverage and quality -------------------------------------------------------------------
 c, d = st.columns([1.3, 1], gap="large")
 with c:
-    ui.panel_title("Where the data is: measurement locations per 600 m cell (3D)")
-    pts3 = pd.concat([sites[["lon", "lat"]].assign(kind="Vs30 site"),
-                      prof.dropna(subset=["lon"])[["lon", "lat"]].drop_duplicates().assign(kind="Vs profile")]
-                     + ([bh[["lon", "lat"]].assign(kind="borehole")] if not bh.empty else []))
-    layer = pdk.Layer("HexagonLayer", pts3, get_position=["lon", "lat"], radius=600, elevation_scale=4,
-                      elevation_range=[0, 1000], extruded=True, coverage=0.88, pickable=True,
-                      color_range=[[int(h[i:i + 2], 16) for i in (1, 3, 5)] for h in ui.SEQUENTIAL])
-    st.pydeck_chart(pdk.Deck(layers=[layer], map_provider="carto", map_style=pdk.map_styles.CARTO_LIGHT,
-                             initial_view_state=pdk.ViewState(latitude=45.53, longitude=-73.63, zoom=9.8, pitch=50,
-                                                              bearing=-20),
-                             tooltip={"html": "{elevationValue} data points in this 600 m cell (Vs30 sites, profile "
-                                              "positions, boreholes)"}),
-                    height=360, width="stretch")
-    st.markdown('<div class="gx-note">Each column is a 600 m hexagon; height and colour count the Vs30 sites, distinct '
-                'Vs-profile positions and boreholes inside it. A profile counts once however many depths it has, and '
-                'profiles placed at the same site or line centroid share one position. A site with both a Vs30 and a '
-                'profile counts twice. Gaps are where new measurements would help most.</div>', unsafe_allow_html=True)
+    ui.panel_title("Where the data is: measurement locations per 600 m cell")
+    kinds = {"Vs30 site": "Vs30 sites", "Vs profile position": "profile positions", "borehole": "boreholes"}
+    pts3 = pd.concat([sites[["x_mtm8", "y_mtm8"]].assign(kind="Vs30 site"),
+                      prof.dropna(subset=["x_mtm8"])[["x_mtm8", "y_mtm8"]].drop_duplicates()
+                      .assign(kind="Vs profile position")]
+                     + ([bh[["x_mtm8", "y_mtm8"]].assign(kind="borehole")] if not bh.empty else []))
+    cells = insight.hex_cells(pts3, radius_m=600)
+    edges = insight.count_classes(int(cells["n"].max()) if not cells.empty else 1)
+    shades = ui.SEQUENTIAL[-len(edges):]  # the busiest class always gets the darkest step
+
+    def shade(n):
+        return shades[sum(n >= e for e in edges) - 1]
+
+    def tip(row):
+        parts = [f"{int(row.get(k, 0))} {kinds[k] if int(row.get(k, 0)) != 1 else kinds[k][:-1]}" for k in kinds
+                 if k in row and int(row.get(k, 0))]
+        return f"<b>{int(row['n'])} data point{'s' if row['n'] != 1 else ''}</b> in this 600 m cell<br>" + " · ".join(parts)
+
+    hexmap = ui.base_map((45.555, -73.70), 10, layers=("Light",))
+    ui.add_regions(hexmap, interactive=False)
+    folium.GeoJson(
+        {"type": "FeatureCollection", "features": [
+            {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [row["ring"]]},
+             "properties": {"tip": tip(row), "fill": shade(row["n"])}} for _, row in cells.iterrows()]},
+        name="Data per cell",
+        style_function=lambda f: {"fillColor": f["properties"]["fill"], "fillOpacity": 0.85, "color": "#ffffff",
+                                  "weight": 1.5},
+        highlight_function=lambda f: {"color": ui.INK, "weight": 2},
+        tooltip=folium.GeoJsonTooltip(fields=["tip"], labels=False),
+    ).add_to(hexmap)
+    hexmap.get_root().html.add_child(folium.Element(ui.map_legend_html(
+        "Data points per cell", [(c, insight.count_class_label(edges, i)) for i, c in enumerate(shades)])))
+    st_folium(hexmap, height=380, use_container_width=True, returned_objects=[], key="ins_hexmap")
+    st.markdown('<div class="gx-note">Each hexagon is a 600 m cell, laid out in MTM 8; its colour counts the Vs30 '
+                'sites, distinct Vs-profile positions and boreholes inside it, darker for more. Hover a cell for the '
+                'breakdown. A profile counts once however many depths it has, and profiles placed at the same site or '
+                'line centroid share one position. A site with both a Vs30 and a profile counts twice. Empty areas '
+                'are where new measurements would help most.</div>', unsafe_allow_html=True)
 with d:
     ui.panel_title("Data quality: what still needs checking")
     flags = []

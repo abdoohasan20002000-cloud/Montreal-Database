@@ -257,3 +257,74 @@ def test_trusted_contributors_are_matched_within_a_longer_name():
     assert not config.is_trusted("Someone Else")
     assert not config.is_trusted("")
     assert not config.is_trusted(None)
+
+
+def test_hex_cells_count_each_point_in_the_nearest_cell():
+    from geotech import insight
+    rng = np.random.default_rng(7)
+    size = 600.0
+    pts = pd.DataFrame({"x_mtm8": 295000 + rng.uniform(-4000, 4000, 400), "y_mtm8": 5040000 + rng.uniform(-4000, 4000, 400),
+                        "kind": rng.choice(["Vs30 site", "borehole"], 400)})
+    cells = insight.hex_cells(pts, size)
+    assert cells["n"].sum() == len(pts)
+    assert (cells["n"] == cells["Vs30 site"] + cells["borehole"]).all()
+    # brute force: the nearest cell centre of a pointy-top grid
+    q, r = np.meshgrid(np.arange(cells["q"].min() - 3, cells["q"].max() + 4),
+                       np.arange(cells["r"].min() - 3, cells["r"].max() + 4))
+    q, r = q.ravel(), r.ravel()
+    cx, cy = size * np.sqrt(3) * (q + r / 2), size * 1.5 * r
+    near = np.argmin((pts["x_mtm8"].to_numpy()[:, None] - cx) ** 2 + (pts["y_mtm8"].to_numpy()[:, None] - cy) ** 2, axis=1)
+    expect = pd.Series(list(zip(q[near], r[near]))).value_counts()
+    got = cells.set_index(["q", "r"])["n"]
+    assert {k: int(v) for k, v in expect.items()} == {k: int(v) for k, v in got.items()}
+    ring = cells["ring"].iloc[0]
+    assert len(ring) == 7 and ring[0] == ring[-1]
+    assert insight.hex_cells(pts.iloc[:0], size).empty
+
+
+def test_count_classes_start_at_one_and_grow_by_a_round_factor():
+    from geotech import insight
+    assert insight.count_classes(0) == [1]
+    assert insight.count_classes(1) == [1]
+    assert insight.count_classes(9) == [1, 2, 4, 8]
+    assert insight.count_classes(2000) == [1, 10, 100, 1000]
+    edges = insight.count_classes(9)
+    assert [insight.count_class_label(edges, i) for i in range(len(edges))] == ["1", "2–3", "4–7", "8 or more"]
+
+
+def test_profile_readings_become_depth_bands_without_gaps_or_overlaps():
+    from geotech import scene3d
+    prof = pd.DataFrame({"site_id": "S1", "x_mtm8": 295000.0, "y_mtm8": 5040000.0,
+                         "depth_m": [1.0, 2.0, 4.0, 10.0, 4.0], "vs_ms": [150.0, 200.0, 300.0, 500.0, 340.0],
+                         "duplicate_of_earlier_sheet": False})
+    seg = scene3d.profile_segments(prof).sort_values("depth_m")
+    assert seg["depth_m"].tolist() == [1.0, 2.0, 4.0, 10.0]  # the two readings at 4 m are merged
+    assert seg.loc[seg["depth_m"] == 4.0, "vs_ms"].item() == 320.0  # at their median
+    assert seg["top_m"].tolist() == [0.5, 1.5, 3.0, 7.5]
+    assert seg["bot_m"].tolist() == [1.5, 3.0, 6.5, 12.5]  # a reading reaches at most MAX_REACH_M either way
+    assert (seg["bot_m"] > seg["top_m"]).all() and (seg["top_m"] >= 0).all()
+    dup = prof.assign(duplicate_of_earlier_sheet=[False, False, False, False, True])
+    assert len(scene3d.profile_segments(dup)) == 4
+
+
+def test_profiles_sharing_a_position_are_fanned_out_but_keep_their_true_position():
+    from geotech import scene3d
+    seg = pd.DataFrame({"site_id": ["A", "A", "B", "C", "D"], "x_mtm8": [295000.0] * 4 + [300000.0],
+                        "y_mtm8": [5040000.0] * 4 + [5045000.0], "lon": 0.0, "lat": 0.0})
+    out = scene3d.fan_out(seg, "site_id", 300)
+    assert out["x_mtm8"].tolist() == seg["x_mtm8"].tolist()
+    shared = out[out["site_id"] != "D"]
+    assert shared["shared_position"].all() and not out.loc[out["site_id"] == "D", "shared_position"].item()
+    assert shared.groupby("site_id")[["lon", "lat"]].nunique().max().max() == 1  # one profile moves as a whole
+    assert shared.drop_duplicates("site_id")[["lon", "lat"]].drop_duplicates().shape[0] == 3  # apart from each other
+    lon, lat = geo.mtm8_to_wgs84(300000.0, 5045000.0)
+    d = out[out["site_id"] == "D"].iloc[0]
+    assert abs(d["lon"] - lon) < 1e-9 and abs(d["lat"] - lat) < 1e-9
+
+
+def test_borehole_depth_falls_back_to_its_deepest_sample():
+    from geotech import scene3d
+    bh = pd.DataFrame({"hole_id": ["H1", "H2", "H3"], "depth_m": [12.0, np.nan, np.nan]})
+    samples = pd.DataFrame({"hole_id": ["H2", "H2"], "depth_bot_m": [3.0, 7.5]})
+    depth = scene3d.borehole_depths(bh, samples)
+    assert depth.iloc[0] == 12.0 and depth.iloc[1] == 7.5 and np.isnan(depth.iloc[2])

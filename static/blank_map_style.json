@@ -1,0 +1,2 @@
+{"version": 8, "name": "Blank backdrop for the 3D view", "sources": {},
+ "layers": [{"id": "backdrop", "type": "background", "paint": {"background-color": "#e9eff4"}}]}

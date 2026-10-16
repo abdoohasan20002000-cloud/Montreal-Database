@@ -11,8 +11,20 @@ from folium.plugins import Draw
 from shapely.geometry import mapping
 from streamlit_folium import st_folium
 
-from geotech import bundle, config, data, geo, terrain, ui
+from geotech import bundle, config, data, geo, scene3d, terrain, ui
 from geotech.config import PRE_MODERN_YEAR
+
+# 3D view: what the ground is draped with, what shows behind it, and the column sizes
+SURFACES = {
+    "Light map": ui.esri_tiles("Canvas/World_Light_Gray_Base"),
+    "Streets": ui.esri_tiles("World_Street_Map"),
+    "Satellite": ui.esri_tiles("World_Imagery"),
+    "Relief only": None,
+}
+BACKDROP = "app/static/blank_map_style.json"  # one flat colour behind the 3D view
+PROFILE_RADIUS_M, VS30_RADIUS_M, BOREHOLE_RADIUS_M = 110, 110, 50
+FAN_SPACING_M = 330  # profiles that share a position are spread this far apart
+
 
 state = st.session_state
 if "goto_regions" in state:  # sent here from the catalogue's "Show on the map"
@@ -25,9 +37,13 @@ ui.hero("Map and 3D",
         chips=["Coordinates <b>MTM 8</b> · EPSG:32188", "Vs30 <b>measured</b> and <b>estimated</b> kept apart",
                "Raw <b>N<sub>field</sub></b> kept · pre-1960 flagged"])
 
+# ---- controls row, with the data filters behind a button at its end ------------------
+controls = st.container(border=True)
+c0, c1, c2, c3, c4 = controls.columns([1.0, 1.75, 1.3, 0.95, 0.62], vertical_alignment="bottom")
+filters = c4.popover("Filters", icon=":material/tune:", width="stretch")
+
 # ---- data ---------------------------------------------------------------------
-with st.sidebar:
-    ui.sidebar_label("Filters")
+with filters:
     eras = st.multiselect("Borehole era", ["pre-1960", "1960 and later", "undated"],
                           default=["pre-1960", "1960 and later", "undated"],
                           help=f"Before {PRE_MODERN_YEAR}, SPT N read about half of modern values.")
@@ -46,7 +62,7 @@ if not bh.empty:
     bh = bh[bh["data_era"].isin(eras)]
     if "source" in bh.columns:
         src = bh["source"].fillna("not stated").astype(str)
-        with st.sidebar:
+        with filters:
             sources = sorted(src.unique())
             pick_src = st.multiselect("Borehole source", sources, default=sources)
         bh = bh[src.isin(pick_src)]
@@ -56,8 +72,7 @@ if not vs_sites.empty:
     vs_sites = vs_sites.assign(site_class_from_measured=vs_sites["vs30_ms"].map(ui.nbcc_class).fillna("–"))
 
 # ---- controls -------------------------------------------------------------------
-with st.container(border=True):
-    c0, c1, c2, c3 = st.columns([1.0, 1.85, 1.35, 0.95], vertical_alignment="bottom")
+with controls:
     view = c0.segmented_control("View", ["2D map", "3D relief"], default="2D map", key="view") or "2D map"
     is_3d = view == "3D relief"
     mode = c1.segmented_control("Area", ["Whole island", "Region", "Circle", "Draw"],
@@ -70,7 +85,7 @@ with st.container(border=True):
     else:
         radius = c2.slider("Radius (m)", 100, 5000, 500, 100, disabled=mode != "Circle" or is_3d)
     colour_by = c3.selectbox("Colour boreholes by", ["Era", "Site class (estimated)"])
-    e1, e2, e3 = st.columns([1.9, 1.2, 1.3], vertical_alignment="bottom")
+    e1, e2, e3, e4, e5 = st.columns([1.6, 1.0, 0.95, 0.95, 0.95], vertical_alignment="bottom")
     layers = e1.pills("Layers", ["Boreholes", "Measured Vs30", "Files"], selection_mode="multi",
                       default=["Boreholes", "Measured Vs30", "Files"], key="layers")
     hint = {"Circle": "Click the map to place the centre of the circle.",
@@ -80,10 +95,16 @@ with st.container(border=True):
     if is_3d:
         hint = ("3D view: drag to pan, right-drag (or Ctrl-drag) to tilt and rotate, scroll to zoom. "
                 "Switch to 2D map to change the selection.")
-        surface = e2.selectbox("Surface", ["Light map", "Satellite", "Relief only"], key="surface")
-        exaggeration = e3.slider("Vertical exaggeration", 1, 15, 6,
+        surface = e2.selectbox("Surface", list(SURFACES), key="surface")
+        exaggeration = e3.slider("Relief stretch", 1, 15, 6,
                                  help="Montréal is fairly flat (Mont Royal is about 230 m), so relief is stretched "
-                                      "to be visible. Symbol heights are not to scale.")
+                                      "to be visible.")
+        depth_stretch = e4.slider("Depth stretch", 5, 80, 30,
+                                  help="Depths below the ground are drawn this many times deeper than they are, so a "
+                                       "30 m profile can be seen at the scale of the island.")
+        ground_pct = e5.slider("Ground opacity", 10, 100, 25, 5, format="%d%%",
+                               help="The ground is see-through so what hangs below it shows. Lower it to see the "
+                                    "profiles and boreholes better, raise it to read the map.")
     st.markdown(f'<div class="gx-note">{hint}</div>', unsafe_allow_html=True)
 
 area = data.selection_from_inputs({"Circle": "Point and radius", "Draw": "Draw an area"}.get(mode, mode),
@@ -175,77 +196,129 @@ def legend_html():
             'border-top:1.5px dashed #5b7083"></span>Borough or city limit</div></div>')
 
 
-SURFACES = {
-    "Light map": "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-    "Satellite": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    "Relief only": None,
-}
-
-
 def rgb(hex_colour, alpha=235):
     h = hex_colour.lstrip("#")
     return [int(h[i:i + 2], 16) for i in (0, 2, 4)] + [alpha]
 
 
+def band_colour(vs):
+    return rgb(ui.SITE_CLASS_COLOURS.get(scene3d.vs_band(vs) or "", ui.ERA_COLOURS["undated"]), 255)
+
+
 def build_3d():
-    """Terrain from AWS Terrain Tiles, with data standing on it as columns."""
-    ex = float(exaggeration)
-    layers = [pdk.Layer(
-        "TerrainLayer",
-        elevation_decoder={"rScaler": 256 * ex, "gScaler": ex, "bScaler": ex / 256, "offset": -32768 * ex},
-        elevation_data=terrain.TERRARIUM_URL,
-        texture=SURFACES[surface], color=[176, 196, 212], max_zoom=14,
-    )]
+    """Terrain from AWS Terrain Tiles, made see-through, with each measurement hanging below the ground to the depth
+    it describes. Things below the surface are drawn first and the ground last, so the ground tints them instead of
+    hiding them."""
+    ex, dx = float(exaggeration), float(depth_stretch)
+    below, on_top = [], []
 
     def ground(df):
         return np.nan_to_num(terrain.elevation(df["lon"].to_numpy(), df["lat"].to_numpy()), nan=0.0) * ex
 
-    if "Measured Vs30" in (layers_on or []) and not vs_sites.empty:
-        v = vs_sites.dropna(subset=["vs30_ms"]).copy()
-        v["z"] = ground(v)
-        v["h"] = v["vs30_ms"] * 1.5
-        v["fill"] = [rgb(ui.SITE_CLASS_COLOURS.get(c, ui.ERA_COLOURS["undated"])) for c in v["site_class_from_measured"]]
-        v["t1"] = v["site_id"].astype(str) + " · " + v["area"].astype(str)
-        v["t2"] = v.apply(lambda r: f"Vs30 {r.vs30_ms:.0f} m/s (measured), class {r.site_class_from_measured}", axis=1)
-        v["t3"] = v["survey_type"].fillna("").astype(str)
-        layers.append(pdk.Layer("ColumnLayer", v[["lon", "lat", "z", "h", "fill", "t1", "t2", "t3"]],
-                                get_position=["lon", "lat", "z"], get_elevation="h", elevation_scale=1,
-                                radius=110, disk_resolution=16, extruded=True, get_fill_color="fill",
-                                pickable=True, auto_highlight=True))
+    def hang(df, top_m, bot_m):
+        """Columns stand on their base, so the base goes at the bottom of the interval."""
+        g = ground(df)
+        return df.assign(gz=g, z=g - np.asarray(bot_m, dtype=float) * dx,
+                         h=np.maximum((np.asarray(bot_m, dtype=float) - np.asarray(top_m, dtype=float)) * dx, 0.5))
+
+    def column(df, radius, **kw):
+        return pdk.Layer("ColumnLayer", df[["lon", "lat", "z", "h", "fill", "t1", "t2", "t3"]],
+                         get_position=["lon", "lat", "z"], get_elevation="h", elevation_scale=1, radius=radius,
+                         disk_resolution=16, extruded=True, get_fill_color="fill", pickable=True, auto_highlight=True,
+                         material=False, **kw)  # unlit, so the colour of each band reads true through the ground
+
+    def disc(df, radius, fill, line, line_px):
+        return pdk.Layer("ScatterplotLayer", df[["lon", "lat", "z", "t1", "t2", "t3"] + (["fill"] if fill == "fill" else [])],
+                         get_position=["lon", "lat", "z"], get_radius=radius, radius_min_pixels=4,
+                         get_fill_color=fill, stroked=True, get_line_color=line, get_line_width=line_px,
+                         line_width_units='"pixels"', pickable=True, auto_highlight=True)
+
+    lift = 3 * ex + 4  # surface marks sit just above the ground they mark
+    if "Measured Vs30" in (layers_on or []):
+        seg = scene3d.fan_out(scene3d.profile_segments(vs_prof), "site_id", FAN_SPACING_M) if not vs_prof.empty else pd.DataFrame()
+        if not seg.empty:
+            seg = hang(seg, seg["top_m"], seg["bot_m"])
+            seg["fill"] = [band_colour(v) for v in seg["vs_ms"]]
+            seg["t1"] = seg["site_id"].astype(str) + " · Vs profile"
+            seg["t2"] = seg.apply(lambda r: f"{r.depth_m:g} m deep: Vs {r.vs_ms:.0f} m/s (measured"
+                                            f"{', ' + str(r.method).lower() if isinstance(r.method, str) else ''})", axis=1)
+            seg["t3"] = (seg["soil_type"].fillna("").astype(str)
+                         + np.where(seg["shared_position"], " · drawn beside its true position, which it shares", ""))
+            ends = seg.groupby(scene3d.PROFILE).agg(lon=("lon", "first"), lat=("lat", "first"), gz=("gz", "first"),
+                                                    deepest=("bot_m", "max"))
+            ends["src"] = [[x, y, z] for x, y, z in zip(ends["lon"], ends["lat"], ends["gz"])]
+            ends["dst"] = [[x, y, z - d * dx] for x, y, z, d in zip(ends["lon"], ends["lat"], ends["gz"], ends["deepest"])]
+            # a thin grey line from the surface to the deepest reading; it shows where a profile has no reading
+            below.append(pdk.Layer("LineLayer", ends[["src", "dst"]], get_source_position="src",
+                                   get_target_position="dst", get_color=[110, 124, 140, 255], get_width=1.5,
+                                   width_units='"pixels"'))
+            below.append(column(seg, PROFILE_RADIUS_M))
+        if not vs_sites.empty:
+            v = vs_sites.dropna(subset=["vs30_ms"]).copy()
+            v["fill"] = [rgb(ui.SITE_CLASS_COLOURS.get(c, ui.ERA_COLOURS["undated"]), 255)
+                         for c in v["site_class_from_measured"]]
+            v["t1"] = v["site_id"].astype(str) + " · " + v["area"].astype(str)
+            v["t2"] = v.apply(lambda r: f"Vs30 {r.vs30_ms:.0f} m/s (measured), class {r.site_class_from_measured}", axis=1)
+            has_profile = v["site_id"].isin(seg["site_id"]) if not seg.empty else pd.Series(False, index=v.index)
+            v["t3"] = np.where(has_profile, "Its Vs profile hangs below.",
+                               f"No profile here: the column shows the top {scene3d.VS30_DEPTH_M} m that Vs30 averages over.")
+            sticks = v[~has_profile]
+            if not sticks.empty:
+                below.append(column(hang(sticks, 0.0, float(scene3d.VS30_DEPTH_M)), VS30_RADIUS_M))
+            v["z"] = ground(v) + lift
+            on_top.append(disc(v, 170, "fill", [255, 255, 255, 255], 2))
     if "Boreholes" in (layers_on or []) and not bh.empty:
         b = bh.copy()
-        b["z"] = ground(b)
+        b["depth"] = scene3d.borehole_depths(b, samples).to_numpy()
         sc = b["site_class"] if "site_class" in b.columns else pd.Series("", index=b.index)
         b["fill"] = [rgb(ui.ERA_COLOURS.get(e, ui.ERA_COLOURS["undated"]) if colour_by == "Era"
-                         else ui.SITE_CLASS_COLOURS.get(str(c)[:1], ui.ERA_COLOURS["undated"]))
+                         else ui.SITE_CLASS_COLOURS.get(str(c)[:1], ui.ERA_COLOURS["undated"]), 255)
                      for e, c in zip(b["data_era"], sc)]
         b["t1"] = b["hole_id"].astype(str)
-        b["t2"] = b["data_era"].astype(str)
+        b["t2"] = b["data_era"].astype(str) + np.where(b["depth"].notna(),
+                                                       " · drilled to " + b["depth"].round(1).astype(str) + " m",
+                                                       " · depth not recorded")
         b["t3"] = ("Site class " + sc.fillna("–").astype(str) + " (estimated)") if colour_by != "Era" else ""
-        layers.append(pdk.Layer("ColumnLayer", b[["lon", "lat", "z", "fill", "t1", "t2", "t3"]],
-                                get_position=["lon", "lat", "z"],
-                                get_elevation=120, radius=28, disk_resolution=8, extruded=True,
-                                get_fill_color="fill", pickable=True))
+        deep = b[b["depth"].notna()]
+        if not deep.empty:
+            below.append(column(hang(deep, 0.0, deep["depth"]), BOREHOLE_RADIUS_M))
+        flat = b[b["depth"].isna()].copy()
+        if not flat.empty:  # no depth to hang: a dot on the surface
+            flat["z"] = ground(flat) + lift
+            on_top.append(disc(flat, 70, "fill", [255, 255, 255, 255], 1))
     if "Files" in (layers_on or []) and uploads:
-        f = pd.DataFrame([{"lon": r["lon"], "lat": r["lat"], "t1": r["title"], "t2": r["data_type"], "t3": "Contributed file"}
-                          for r in uploads])
-        f["z"] = ground(f)
-        layers.append(pdk.Layer("ColumnLayer", f, get_position=["lon", "lat", "z"], get_elevation=260, radius=60,
-                                disk_resolution=4, extruded=True, get_fill_color=rgb(ui.UPLOAD_COLOUR),
-                                pickable=True))
+        f = pd.DataFrame([{"lon": r["lon"], "lat": r["lat"], "t1": r["title"], "t2": r["data_type"],
+                           "t3": "Contributed file (no depth recorded)"} for r in uploads])
+        f["z"] = ground(f) + lift
+        on_top.append(disc(f, 150, [255, 255, 255, 255], rgb(ui.UPLOAD_COLOUR, 255), 3))
     if area not in (None, "incomplete"):
         shp = geo.shp_transform_to_wgs84(area)
         paths = []
         for poly in getattr(shp, "geoms", [shp]):  # a region pick can be several polygons
             ring = np.asarray(poly.exterior.coords)
-            zr = np.nan_to_num(terrain.elevation(ring[:, 0], ring[:, 1]), nan=0.0) * ex + 25
+            zr = np.nan_to_num(terrain.elevation(ring[:, 0], ring[:, 1]), nan=0.0) * ex + lift
             paths.append({"path": [[x, y, z] for (x, y), z in zip(ring, zr)]})
         # pydeck reads a bare string as a data field; quoted, it is passed through as the value "pixels".
-        layers.append(pdk.Layer("PathLayer", paths, get_path="path", get_color=rgb(ui.ACCENT_DARK, 255), get_width=4,
+        on_top.append(pdk.Layer("PathLayer", paths, get_path="path", get_color=rgb(ui.ACCENT_DARK, 255), get_width=4,
                                 width_units='"pixels"'))
-    view_state = pdk.ViewState(latitude=45.525, longitude=-73.64, zoom=10.8, pitch=60, bearing=-25)
-    return pdk.Deck(layers=layers, initial_view_state=view_state, map_style=None,
-                    tooltip={"html": "<b>{t1}</b><br/>{t2}<br/>{t3}", "style": {"fontSize": "12px"}})
+    ground_layer = pdk.Layer(
+        "TerrainLayer",
+        elevation_decoder={"rScaler": 256 * ex, "gScaler": ex, "bScaler": ex / 256, "offset": -32768 * ex},
+        elevation_data=terrain.TERRARIUM_URL,
+        texture=SURFACES[surface], color=[176, 196, 212], max_zoom=14, opacity=ground_pct / 100,
+    )
+    view_state = pdk.ViewState(latitude=45.535, longitude=-73.62, zoom=11.0, pitch=58, bearing=-28, max_pitch=80)
+    # a plain backdrop, not a basemap: seen through the ground, a basemap would be a second, flat copy of the map
+    return pdk.Deck(layers=below + on_top + [ground_layer], initial_view_state=view_state, map_style=BACKDROP,
+                    map_provider=None, tooltip={"html": "<b>{t1}</b><br/>{t2}<br/>{t3}", "style": {"fontSize": "12px"}})
+
+
+def band_key_html():
+    """Swatches for the velocity bands, softest (darkest) first."""
+    return '<span style="display:inline-flex;flex-wrap:wrap;gap:4px 10px;vertical-align:middle">' + "".join(
+        f'<span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">'
+        f'<span style="width:12px;height:12px;border-radius:3px;background:{ui.SITE_CLASS_COLOURS[k]}"></span>'
+        f'{scene3d.VS_BAND_LABELS[k]}</span>' for k in "EDCBA") + " m/s</span>"
 
 
 layers_on = layers
@@ -256,11 +329,16 @@ with left:
         st.pydeck_chart(build_3d(), height=640, width="stretch")
         key3d = ("blue = 1960 and later, orange = pre-1960, grey = undated" if colour_by == "Era"
                  else "estimated site class, light (A) to dark (E)")
-        st.markdown('<div class="gx-note">Wide violet columns are measured Vs30 sites: height = Vs30 (taller = stiffer '
-                    f'ground), colour = NBCC class {ui.class_chips_html()}. Thin columns are boreholes ({key3d}); '
-                    'green squares are contributed files. Terrain: AWS Terrain Tiles (SRTM and other public DEMs), '
-                    f'stretched {exaggeration}× vertically; columns stand on it for display only.</div>',
-                    unsafe_allow_html=True)
+        st.markdown(
+            '<div class="gx-note">The ground is see-through and every measurement hangs below it to the depth it '
+            f'describes. <b>Vs profiles</b> are coloured by the velocity measured at each depth: {band_key_html()}; '
+            'the thin grey line shows depths with no reading. A <b>measured Vs30 site</b> is the disc on the surface, '
+            f'in its NBCC class colour {ui.class_chips_html()}; where it has no profile, a column in the same colour '
+            f'shows the top {scene3d.VS30_DEPTH_M} m that Vs30 averages over. <b>Boreholes</b> hang to their drilled '
+            f'depth ({key3d}). Green rings are contributed files, which carry no depth. Profiles that share one '
+            'position are fanned out around it. Terrain: AWS Terrain Tiles (SRTM and other public DEMs), relief '
+            f'stretched {exaggeration}×, depths stretched {depth_stretch}×, for display only.</div>',
+            unsafe_allow_html=True)
     else:
         out = st_folium(build_map(), height=640, use_container_width=True,
                         returned_objects=["last_clicked", "last_active_drawing"], key="atlas_map")

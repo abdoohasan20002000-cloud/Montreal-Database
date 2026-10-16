@@ -28,7 +28,7 @@ COVERAGE_COLOURS = {"Boreholes": CATEGORICAL[0], "Measured Vs30 sites": CATEGORI
 INK, INK_2, MUTED, ACCENT, ACCENT_DARK = "#0f1b2d", "#475569", "#566476", "#0891b2", "#0e7490"
 SURFACE = "#ffffff"
 
-ART_URL = "app/static/hero_contours.webp"  # made by scripts/make_hero_art.py
+ART_URL = "app/static/hero_mcgill.webp"  # McGill's Arts Building; made by scripts/make_hero_photo.py
 
 _CSS = """
 <style>
@@ -41,36 +41,29 @@ _CSS = """
     linear-gradient(rgba(14,116,144,0.035) 1px, transparent 1px) 0 0 / 46px 46px,
     linear-gradient(90deg, rgba(14,116,144,0.035) 1px, transparent 1px) 0 0 / 46px 46px,
     #f5f8fb; }
-.block-container { position:relative; z-index:1; padding-top:1.4rem; padding-bottom:3rem; max-width:1480px; }
-[data-testid="stHeader"] { background: transparent; }
+.block-container { position:relative; z-index:1; padding-top:4.6rem; padding-bottom:3rem; max-width:1480px; }
+
+/* the page menu: one frosted bar across the top, the current page tinted */
+[data-testid="stHeader"] { background:rgba(245,248,251,0.84); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  border-bottom:1px solid rgba(219,228,236,0.9); }
+[data-testid="stTopNavLink"] { border-radius:999px; }
+[data-testid="stTopNavLink"]:hover { background:var(--soft); }
+[data-testid="stTopNavLink"][aria-current="page"] { background:rgba(8,145,178,0.12); }
+[data-testid="stTopNavLink"][aria-current="page"] * { color:var(--accent-dark) !important; }
 h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
 
-/* sidebar: navigation as outlined buttons under small spaced-out section labels */
-[data-testid="stSidebar"] { background:#ffffff; }
-[data-testid="stSidebarNav"] { padding:0 6px; }
-[data-testid="stNavSectionHeader"] { pointer-events:none; margin:14px 0 8px; padding:0 2px; min-height:0; }
-[data-testid="stNavSectionHeader"] p { font-family:"JetBrains Mono", ui-monospace, monospace; font-size:0.68rem;
-  letter-spacing:0.26em; text-transform:uppercase; color:var(--muted); font-weight:500; }
-[data-testid="stNavSectionHeader"] > div:last-child { display:none; }
-[data-testid="stSidebarNavLink"] { border:1px solid #cfe1e8; background:#f8fbfc; border-radius:12px; min-height:46px;
-  padding:0.55rem 0.9rem; margin:0 0 10px; justify-content:center;
-  transition: border-color .15s, background .15s, box-shadow .15s; }
-[data-testid="stSidebarNavLink"]:hover { border-color:var(--accent); background:#ecf8fb; }
-[data-testid="stSidebarNavLink"] p { font-size:0.97rem; font-weight:500; color:var(--ink); }
-[data-testid="stSidebarNavLink"] [data-testid="stIconMaterial"] { color:var(--accent-dark) !important; }
-[data-testid="stSidebarNavLink"][aria-current="page"] { background:linear-gradient(135deg, #0e7490, #0b7c98);
-  border-color:#0e7490; box-shadow:0 8px 22px rgba(8,145,178,0.28); }
-[data-testid="stSidebarNavLink"][aria-current="page"] p,
-[data-testid="stSidebarNavLink"][aria-current="page"] [data-testid="stIconMaterial"] { color:#ffffff !important; font-weight:600; }
-[data-testid="stSidebarNavSeparator"] { display:none; }
-[data-testid="stSidebarUserContent"] [data-testid="stElementContainer"]:has(.gx-credit) { order:99; }
-.gx-side-label { font-family:"JetBrains Mono", ui-monospace, monospace; font-size:0.68rem; letter-spacing:0.26em;
-  text-transform:uppercase; color:var(--muted); margin:6px 0 2px; }
-.gx-credit { border-top:1px solid var(--line); margin-top:22px; padding-top:16px; }
-.gx-credit .p { width:52px; height:52px; border-radius:50%%; object-fit:cover; display:block; margin-bottom:10px;
-  border:2px solid var(--line); }
-.gx-credit .n { font-family:"Space Grotesk", sans-serif; font-weight:700; color:var(--ink); font-size:1rem; }
-.gx-credit .r { color:var(--muted); font-size:0.8rem; line-height:1.5; margin-top:3px; }
+/* footer: who made it and where the data comes from, moved to the end of every page */
+[data-testid="stLayoutWrapper"]:has(> [class*="st-key-gxfooter"]), [class*="st-key-gxfooter"] { order:999; }
+[class*="st-key-gxfooter"] { margin-top:28px; }
+.gx-footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:14px 28px;
+  border-top:1px solid var(--line); padding:18px 2px 4px; }
+.gx-footer .who { display:flex; align-items:center; gap:12px; }
+.gx-footer .p { width:46px; height:46px; border-radius:50%%; object-fit:cover; border:2px solid #ffffff;
+  box-shadow:0 0 0 1px var(--line), 0 4px 12px rgba(15,27,45,0.10); }
+.gx-footer .n { font-family:"Space Grotesk", sans-serif; font-weight:700; color:var(--ink); font-size:0.98rem; }
+.gx-footer .r { color:var(--muted); font-size:0.8rem; line-height:1.45; }
+.gx-footer .src { text-align:right; max-width:560px; }
+@media (max-width: 700px) { .gx-footer .src { text-align:left; } }
 
 /* header card */
 .gx-hero { position:relative; overflow:hidden; border:1px solid #cfe3ea; border-radius:22px; padding:26px 36px 24px;
@@ -78,7 +71,7 @@ h1, h2, h3, h4 { letter-spacing:-0.01em; color:var(--ink); }
     linear-gradient(180deg, #ffffff, #f4fafc);
   box-shadow: 0 18px 50px rgba(15,27,45,0.08), 0 1px 0 rgba(255,255,255,0.8) inset; }
 .gx-hero::after { content:""; position:absolute; top:-10%%; bottom:-10%%; right:-4%%; width:62%%; z-index:0;
-  background: var(--art) center / cover no-repeat; opacity:0.9; pointer-events:none;
+  background: var(--art) 55%% 100%% / cover no-repeat; opacity:0.95; pointer-events:none;
   -webkit-mask-image: linear-gradient(90deg, transparent 0%%, rgba(0,0,0,0.35) 30%%, #000 70%%);
   mask-image: linear-gradient(90deg, transparent 0%%, rgba(0,0,0,0.35) 30%%, #000 70%%); }
 .gx-hero > * { position:relative; z-index:1; }
@@ -211,15 +204,23 @@ LEAFLET_CSS = """
 </style>
 """
 
-CARTO_ATTR = "© OpenStreetMap contributors © CARTO"
+ESRI_ATTR = "Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap contributors and the GIS user community"
+LABELS = "Place names"
+
+
+def esri_tiles(service):
+    """An Esri basemap tile URL. These need no key (CARTO's now do, and show "API KEY REQUIRED" without one)."""
+    return f"https://server.arcgisonline.com/ArcGIS/rest/services/{service}/MapServer/tile/{{z}}/{{y}}/{{x}}"
+
+
+# name: (tile URL, attribution, deepest zoom the tiles exist at, labels drawn on top of it)
 TILES = {
-    "Light": ("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", CARTO_ATTR, 20),
-    "Streets": ("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", CARTO_ATTR, 20),
-    "Satellite": ("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                  "Imagery © Esri", 19),
+    "Light": (esri_tiles("Canvas/World_Light_Gray_Base"), ESRI_ATTR, 16, esri_tiles("Canvas/World_Light_Gray_Reference")),
+    "Streets": (esri_tiles("World_Street_Map"), ESRI_ATTR, 19, None),
+    "Satellite": (esri_tiles("World_Imagery"), "Imagery © Esri — Esri, Maxar, Earthstar Geographics", 19,
+                  esri_tiles("Reference/World_Boundaries_and_Places")),
     "Topographic (relief)": ("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-                             "© OpenStreetMap contributors, SRTM · style © OpenTopoMap (CC-BY-SA)", 17),
-    "Dark": ("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", CARTO_ATTR, 20),
+                             "© OpenStreetMap contributors, SRTM · style © OpenTopoMap (CC-BY-SA)", 17, None),
 }
 
 
@@ -249,7 +250,7 @@ def credit_byline():
 
 @st.cache_data(show_spinner=False, max_entries=2)
 def _portrait_src(name, stamp):
-    """The portrait as a data: URL, so it survives in the HTML the sidebar writes. Empty when there is no file."""
+    """The portrait as a data: URL, so it travels inside the footer's HTML. Empty when there is no file."""
     f = config.ASSETS / name
     try:
         kind = mimetypes.guess_type(name)[0] or "image/jpeg"
@@ -265,23 +266,21 @@ def portrait_src():
     return _portrait_src(config.CREDITS["photo"], f.stat().st_mtime_ns)
 
 
-def sidebar_credit():
+def page_footer():
+    """Who made the archive and where the data comes from, at the foot of every page."""
     c = config.CREDITS
+    src = portrait_src()
+    who = ""
     if c.get("name"):
-        src = portrait_src()
-        body = ((f'<img class="p" src="{src}" alt="">' if src else "")
-                + f'<div class="n">{html.escape(c["name"])}</div>'
-                + (f'<div class="r">{html.escape(c["role"])}</div>' if c.get("role") else "")
-                + (f'<div class="r">Supervisor: {html.escape(c["supervisor"])}</div>' if c.get("supervisor") else ""))
-    else:
-        body = (f'<div class="n">{html.escape(config.APP_NAME)}</div>'
-                f'<div class="r">{html.escape(config.DATA_CREDIT)}</div>')
-    with st.sidebar:
-        st.markdown(f'<div class="gx-credit">{body}</div>', unsafe_allow_html=True)
-
-
-def sidebar_label(text):
-    st.markdown(f'<div class="gx-side-label">{html.escape(text)}</div>', unsafe_allow_html=True)
+        who = ((f'<img class="p" src="{src}" alt="">' if src else "")
+               + f'<div><div class="n">{html.escape(c["name"])}</div>'
+               + (f'<div class="r">{html.escape(c["role"])}</div>' if c.get("role") else "")
+               + (f'<div class="r">Supervisor: {html.escape(c["supervisor"])}</div>' if c.get("supervisor") else "")
+               + "</div>")
+    with st.container(key="gxfooter"):
+        st.markdown(f'<div class="gx-footer"><div class="who">{who}</div><div class="src">'
+                    f'<div class="n">{html.escape(config.APP_NAME)}</div>'
+                    f'<div class="r">{html.escape(config.DATA_CREDIT)}</div></div></div>', unsafe_allow_html=True)
 
 
 def kpis(items, cols=2):
@@ -371,8 +370,13 @@ def base_map(location=(45.55, -73.66), zoom=11, layers=("Light", "Streets", "Sat
     """A folium map on a light basemap, with the other basemaps one click away."""
     m = folium.Map(location=list(location), zoom_start=zoom, tiles=None, control_scale=True, font_size="12px")
     for i, name in enumerate(layers):
-        url, attr, max_zoom = TILES[name]
-        folium.TileLayer(url, name=name, attr=attr, max_zoom=max_zoom, show=i == 0).add_to(m)
+        url, attr, native, _ = TILES[name]
+        folium.TileLayer(url, name=name, attr=attr, max_native_zoom=native, max_zoom=20, show=i == 0).add_to(m)
+    # Place names for the first (default) basemap, as a layer that can be switched off; the light base has none.
+    labels = TILES[layers[0]][3]
+    if labels:
+        folium.TileLayer(labels, name=LABELS, attr=TILES[layers[0]][1], overlay=True, show=True,
+                         max_native_zoom=TILES[layers[0]][2], max_zoom=20).add_to(m)
     m.get_root().header.add_child(folium.Element(LEAFLET_CSS))
     return m
 
@@ -396,6 +400,19 @@ def add_regions(m, selected=(), show=True, interactive=True):
             "tooltip": folium.GeoJsonTooltip(fields=["region", "kind"], aliases=["", ""], labels=False)}
            if interactive else {}),
     ).add_to(m)
+
+
+def map_legend_html(title, items):
+    """A small legend card in the bottom-right corner of a folium map (over the river, clear of the island):
+    (colour, label) swatches under a title."""
+    rows = "".join(f'<div style="display:flex;align-items:center;gap:7px;margin:2px 0">'
+                   f'<span style="width:14px;height:12px;border-radius:3px;background:{c}"></span>{html.escape(t)}</div>'
+                   for c, t in items)
+    return ('<div style="position:absolute;bottom:30px;right:10px;z-index:800;background:rgba(255,255,255,0.95);'
+            f'padding:9px 12px;border-radius:12px;font:12px/1.4 Inter,system-ui,sans-serif;color:{INK};'
+            'border:1px solid #dbe4ec;box-shadow:0 8px 24px rgba(15,27,45,0.12)">'
+            f'<div style="font:500 10px/1.2 \'JetBrains Mono\',monospace;letter-spacing:.2em;color:{MUTED};'
+            f'text-transform:uppercase;margin-bottom:6px">{html.escape(title)}</div>{rows}</div>')
 
 
 def safe_tip(text):

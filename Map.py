@@ -149,27 +149,21 @@ def main():
     from geotech import config
 
     st.set_page_config(page_title=config.APP_NAME, page_icon="🪨", layout="wide",
-                       initial_sidebar_state="auto")
+                       initial_sidebar_state="collapsed")
     ui.apply_style()
     ui.require_app_password()  # stops here, before any page is built, when APP_PASSWORD is in the secrets
-    pages = {
-        "Navigate": [
-            st.Page("views/home.py", title="Home", icon=":material/home:", default=True),
-            st.Page("views/guide.py", title="User guide", icon=":material/menu_book:"),
-        ],
-        "Explore the data": [
-            st.Page("views/catalogue.py", title="Data catalogue", icon=":material/dataset:"),
-            st.Page("views/explore.py", title="Map and 3D", icon=":material/map:"),
-            st.Page("views/insights.py", title="Insights", icon=":material/insights:"),
-            st.Page("views/site_report.py", title="Site report", icon=":material/location_searching:"),
-        ],
-        "Contribute": [
-            st.Page("views/contribute.py", title="Contribute data", icon=":material/upload_file:"),
-            st.Page("views/curate.py", title="Curate", icon=":material/fact_check:"),
-        ],
-    }
-    page = st.navigation(pages, position="sidebar", expanded=True)
-    ui.sidebar_credit()  # pinned to the foot of the sidebar by CSS, after any page filters
+    pages = [  # one row across the top, in reading order
+        st.Page("views/home.py", title="Home", icon=":material/home:", default=True),
+        st.Page("views/guide.py", title="User guide", icon=":material/menu_book:"),
+        st.Page("views/catalogue.py", title="Data catalogue", icon=":material/dataset:"),
+        st.Page("views/explore.py", title="Map and 3D", icon=":material/map:"),
+        st.Page("views/insights.py", title="Insights", icon=":material/insights:"),
+        st.Page("views/site_report.py", title="Site report", icon=":material/location_searching:"),
+        st.Page("views/contribute.py", title="Contribute data", icon=":material/upload_file:"),
+        st.Page("views/curate.py", title="Curate", icon=":material/fact_check:"),
+    ]
+    page = st.navigation(pages, position="top")
+    ui.page_footer()  # written before the page so a page that stops early still has it; CSS moves it to the end
     page.run()
 
 

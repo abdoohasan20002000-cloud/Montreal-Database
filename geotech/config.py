@@ -25,11 +25,10 @@ CRS_WGS84 = "EPSG:4326"
 ISLAND_BBOX = {"lon_min": -73.99, "lon_max": -73.46, "lat_min": 45.40, "lat_max": 45.71}
 SHORE_TOLERANCE_M = 250
 
-# Credit shown on the home page and at the foot of the sidebar. Leave a field empty to hide it.
-# The app's name, shown in the browser tab, the headers and the sidebar. Change it here and it changes everywhere.
+# The app's name, shown in the browser tab, the headers and the footer. Change it here and it changes everywhere.
 APP_NAME = "Montreal Database Archive"
 
-# Whose work this is. "photo" is a file under assets/ (jpg or png, square looks best); leave it out for no portrait.
+# Whose work this is, shown at the foot of every page. Leave a field empty to hide it. "photo" is a file under assets/ (jpg or png, square looks best); leave it out for no portrait.
 CREDITS = {"name": "Abdelrahman Elrawy", "role": "PhD candidate, Civil Engineering, McGill University",
            "supervisor": "", "photo": "portrait.jpg"}
 ASSETS = ROOT / "assets"

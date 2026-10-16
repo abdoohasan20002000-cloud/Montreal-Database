@@ -16,7 +16,7 @@ download it with its source, and contribute what they have.
   drawn area; see counts and tables; download one zip (tables in MTM 8 with a WGS84 copy, the Public contributed
   files, a manifest and a README).
 - **Insights**: headline numbers, Vs with depth by soil against the Rosset sand and clay fits, measured Vs30 by
-  survey area or by region, the NBCC class mix, data density and open data-quality flags. A sidebar filter limits
+  survey area or by region, the NBCC class mix, data density and open data-quality flags. A region filter at the top limits
   every chart to chosen regions.
 - **Site report**: pick a point; it gives the region, the measured Vs30 sites nearby, an inverse-distance Vs30
   labelled INTERPOLATED, the NBCC class derived from it, the Vs profiles nearby and a plain-language summary. Every

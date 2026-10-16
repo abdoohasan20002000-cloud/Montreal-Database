@@ -21,17 +21,20 @@ STEPS = [
         "status, or search by words. Island-wide datasets match every region.",
         "Click a row for its details and downloads (cut to the chosen regions), or <b>Show on the map</b>."]),
     ("Map and 3D", "views/explore.py", [
-        "Choose <b>2D map</b> or <b>3D relief</b> at the top. In 3D, drag to pan, right-drag to tilt, scroll to zoom.",
+        "Choose <b>2D map</b> or <b>3D relief</b> at the top. In 3D, drag to pan, right-drag to tilt, scroll to "
+        "zoom. The ground is see-through: each Vs profile hangs below it to the depth it reached, coloured by "
+        "velocity, and each borehole goes down to its drilled depth.",
         "Pick the area: the <b>whole island</b>, one or more <b>regions</b> (boroughs or linked cities), a "
         "<b>circle</b> (click the map to place it) or <b>draw</b> a rectangle or polygon.",
         "Turn layers on and off: boreholes, measured Vs30 sites, contributed files. Change the basemap with the "
-        "layer button at the top right of the map.",
+        "layer button at the top right of the map. <b>Filters</b> holds the years, the demo data and the "
+        "borehole sources.",
         "The panel on the right counts what is in the area. <b>Prepare zip</b> bundles the tables (MTM 8 with a "
         "WGS84 copy), the original files, a manifest and a README with the caveats."]),
     ("Insights", "views/insights.py", [
-        "Headline numbers for the whole island or the regions picked in the sidebar, then Vs against depth for "
+        "Headline numbers for the whole island or the regions picked at the top of the page, then Vs against depth for "
         "each soil with the published sand and clay fits drawn for comparison.",
-        "Measured Vs30 by survey area or by region, the NBCC class mix, and a 3D map of where measurements are "
+        "Measured Vs30 by survey area or by region, the NBCC class mix, and a map of 600 m cells showing where measurements are "
         "dense or thin.",
         "The data-quality table lists what still needs checking and what each flag means."]),
     ("Site report", "views/site_report.py", [
@@ -150,9 +153,10 @@ who uploaded it and when, and who approved it and when.
 
 with src:
     st.markdown(f"""
-**Sources.** {html.escape(config.DATA_CREDIT)}. Terrain in the 3D view and the header art: AWS Terrain Tiles
-(SRTM and other public elevation models). Basemaps: © OpenStreetMap contributors, © CARTO, Esri imagery,
-OpenTopoMap.
+**Sources.** {html.escape(config.DATA_CREDIT)}. Terrain in the 3D view: AWS Terrain Tiles
+(SRTM and other public elevation models). Basemaps: Esri (light grey canvas, streets, imagery and place names;
+© OpenStreetMap contributors and the GIS user community), OpenTopoMap. Header photo: McGill's Arts Building,
+taken by the app's author.
 
 **Region limits.** "Limites administratives de l'agglomération de Montréal" (arrondissements et villes liées),
 Ville de Montréal open data portal, CC BY 4.0. A GitHub Action runs `scripts/fetch_regions.py` to download them,
@@ -162,6 +166,6 @@ the on-island checks is their union.
 **Rebuilding the data.** Every table is made by a script, not by hand:
 - `python scripts/prepare_rosset_vs.py` rebuilds `data/vs30_sites.csv`, `data/vs_profiles.csv` and
   `data/vs_regressions.csv` from the Rosset workbook, and writes the checks to `data/vs_prepare_report.txt`.
-- `python scripts/make_hero_art.py` redraws the contour art in the page headers (decoration only).
+- `python scripts/make_hero_photo.py PHOTO LEFT TOP RIGHT BOTTOM` cuts the header photo from a campus photo.
 - `python scripts/make_demo_data.py` makes the synthetic DEMO boreholes for trying the app.
 """)

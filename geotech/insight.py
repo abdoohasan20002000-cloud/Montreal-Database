@@ -125,3 +125,60 @@ def report_table(lat, lon, x, y, radius_m, near, est, n_used, region=""):
         rows.append({"item": "NBCC site class at this location", "value": nbcc_class(est), "status": "interpolated",
                      "method": "NBCC Vs30 limits applied to the interpolated Vs30", "source": "", "date": today})
     return pd.DataFrame(rows)
+
+
+SQRT3 = np.sqrt(3.0)
+
+
+def hex_cells(points, radius_m=600.0):
+    """Count points in flat hexagonal cells laid out in MTM 8 metres.
+
+    `points` has x_mtm8, y_mtm8 and kind. Cells are pointy-topped, `radius_m` from centre to corner. Returns one row per
+    cell with any point in it: the count of each kind, the total, and the cell's corners as [lon, lat] pairs for the
+    web map (closed ring)."""
+    pts = points.dropna(subset=["x_mtm8", "y_mtm8"])
+    if pts.empty:
+        return pd.DataFrame(columns=["q", "r", "n", "ring"])
+    x, y = pts["x_mtm8"].to_numpy(float), pts["y_mtm8"].to_numpy(float)
+    # axial coordinates, then rounding in cube coordinates to the nearest cell
+    qf, rf = (SQRT3 / 3 * x - y / 3) / radius_m, (2 / 3 * y) / radius_m
+    sf = -qf - rf
+    q, r, s = np.round(qf), np.round(rf), np.round(sf)
+    dq, dr, ds = np.abs(q - qf), np.abs(r - rf), np.abs(s - sf)
+    fix_q = (dq > dr) & (dq > ds)
+    fix_r = ~fix_q & (dr > ds)
+    q = np.where(fix_q, -r - s, q)
+    r = np.where(fix_r, -q - s, r)
+    cells = pts.assign(q=q.astype(int), r=r.astype(int))
+    counts = cells.pivot_table(index=["q", "r"], columns="kind", aggfunc="size", fill_value=0)
+    counts.columns = [str(c) for c in counts.columns]
+    counts["n"] = counts.sum(axis=1)
+    counts = counts.reset_index()
+    cx = radius_m * SQRT3 * (counts["q"] + counts["r"] / 2)
+    cy = radius_m * 1.5 * counts["r"]
+    angles = np.deg2rad(30 + 60 * np.arange(7))  # six corners and back to the first
+    ring_x = cx.to_numpy()[:, None] + radius_m * np.cos(angles)[None, :]
+    ring_y = cy.to_numpy()[:, None] + radius_m * np.sin(angles)[None, :]
+    from . import geo
+    lon, lat = geo.mtm8_to_wgs84(ring_x.ravel(), ring_y.ravel())
+    lon, lat = np.asarray(lon).reshape(ring_x.shape), np.asarray(lat).reshape(ring_y.shape)
+    counts["ring"] = [np.column_stack([lo, la]).round(6).tolist() for lo, la in zip(lon, lat)]
+    return counts
+
+
+def count_classes(most):
+    """Lower edges of up to five count classes, growing by a round factor (2, 3, 5 or 10) chosen so five classes
+    reach `most`, and none starting above it: 1, 2, 4, 8 for up to 15 points per cell; 1, 10, 100, 1000 for
+    thousands. The last class is open-ended."""
+    for f in (2, 3, 5, 10, 100):
+        if f ** 4 >= most:
+            break
+    return [f ** i for i in range(5) if f ** i <= max(most, 1)]  # no class above the largest count
+
+
+def count_class_label(edges, i):
+    lo = edges[i]
+    if i == len(edges) - 1:
+        return f"{lo:,}" if lo == 1 else f"{lo:,} or more"
+    hi = edges[i + 1] - 1
+    return f"{lo:,}" if hi == lo else f"{lo:,}–{hi:,}"
