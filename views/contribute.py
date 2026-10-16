@@ -134,6 +134,7 @@ if submitted:
         st.error("Nothing was submitted. Fix the blocked files above (or leave them out) and try again.")
         st.stop()
 
+    trusted = config.is_trusted(uploaded_by)
     c = footprint.centroid
     lon, lat = geo.mtm8_to_wgs84(c.x, c.y)
     submission = new_id()
@@ -148,10 +149,18 @@ if submitted:
             "uploaded_by": uploaded_by.strip(), "uploaded_at": now_iso(),
             "geom_type": "point" if footprint.geom_type == "Point" else "area",
             "x_mtm8": round(c.x, 2), "y_mtm8": round(c.y, 2), "lon": round(lon, 6), "lat": round(lat, 6),
-            "footprint_wkt_mtm8": footprint.wkt, "region": "; ".join(regions), "status": "pending",
+            "footprint_wkt_mtm8": footprint.wkt, "region": "; ".join(regions),
+            "status": "approved" if trusted else "pending",
+            "reviewed_by": "trusted contributor" if trusted else None,
+            "reviewed_at": now_iso() if trusted else None,
             "check_report": [{"level": lv, "message": ms} for lv, ms in report],
         }
         store.add(record, data)
     state.pop("up_geom", None)
-    st.success(f"Submitted {len(checked)} file{'s' if len(checked) > 1 else ''}. A curator will review "
-               f"{'them' if len(checked) > 1 else 'it'}; approved data appears in the catalogue and on the map.")
+    n = f"{len(checked)} file{'s' if len(checked) > 1 else ''}"
+    if trusted:
+        st.success(f"Added {n} to the archive. {'They are' if len(checked) > 1 else 'It is'} in the catalogue and "
+                   f"on the map now.")
+    else:
+        st.success(f"Submitted {n}. A curator will review {'them' if len(checked) > 1 else 'it'}; approved data "
+                   f"appears in the catalogue and on the map.")

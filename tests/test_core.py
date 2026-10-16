@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 from shapely.geometry import Point
 
-from geotech import data, geo, validate
+from geotech import config, data, geo, validate
 from geotech.storage import LocalStore
 
 
@@ -249,3 +249,11 @@ def test_today_is_montreal_date():
     from datetime import datetime, timezone
     from geotech import config
     assert config.today() == datetime.now(timezone.utc).astimezone(config.TIMEZONE).date()
+
+
+def test_trusted_contributors_are_matched_within_a_longer_name():
+    assert config.is_trusted("Philippe Rosset")
+    assert config.is_trusted("philippe rosset, McGill University")
+    assert not config.is_trusted("Someone Else")
+    assert not config.is_trusted("")
+    assert not config.is_trusted(None)

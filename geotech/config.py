@@ -33,6 +33,17 @@ APP_NAME = "Montreal Database Archive"
 CREDITS = {"name": "Abdelrahman Elrawy", "role": "PhD candidate, Civil Engineering, McGill University",
            "supervisor": "", "photo": "portrait.jpg"}
 ASSETS = ROOT / "assets"
+# People whose uploads go straight into the archive without waiting in the curator's queue. Matched against the
+# "Your name and organisation" field, ignoring case, so "Philippe Rosset, McGill" matches "Philippe Rosset".
+# The automatic file checks still run for them; a file that fails one is still refused.
+TRUSTED_CONTRIBUTORS = ("Philippe Rosset",)
+
+
+def is_trusted(uploaded_by):
+    who = (uploaded_by or "").casefold()
+    return any(name.casefold() in who for name in TRUSTED_CONTRIBUTORS)
+
+
 DATA_CREDIT = ("Measured Vs: Rosset et al. compilation · Borehole archive: City of Montréal, MTQ and MELCC")
 
 PRE_MODERN_YEAR = 1960  # pre-1960 SPT N reads about half of modern values (era multiplier ~1.7)
